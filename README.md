@@ -124,7 +124,7 @@ Maestro cannot dismiss a secure lock screen.
 | Phone | Samsung Galaxy S25 (`SM-S931B`), Android 16 / API 36, arm64-v8a, serial `R3GL204147Z`, connected over USB |
 | `./gradlew :app:assembleDebug` | PASS — JDK 21.0.12, Gradle 9.7.1, AGP 9.4.1 (also after `./gradlew clean`) |
 | Install + launch | PASS — `adb install -r` returned `Success`; `MainActivity` was the resumed activity and `logcat -b crash` was empty |
-| Maestro smoke (`maestro test --device R3GL204147Z .maestro --include-tags smoke`) | BLOCKED at the time of writing — the phone had a secure lock screen, which Maestro cannot pass. Rerun after unlocking the phone. |
+| Maestro smoke | PASS — `maestro test --device R3GL204147Z .maestro --include-tags smoke` → `1/1 Flow Passed`, Maestro CLI 2.11.0, phone unlocked |
 
 ## Not part of this issue
 

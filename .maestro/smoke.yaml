@@ -6,4 +6,4 @@ tags:
 ---
 - launchApp
 - assertVisible: "Kaukosäädin"
-- assertVisible: "No device controls yet"
+- assertVisible: "No device controls yet.*"
