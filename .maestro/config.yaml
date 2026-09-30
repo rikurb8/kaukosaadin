@@ -1,0 +1,14 @@
+# Maestro workspace for the Kaukosäädin Android app.
+#
+# Discovery: everything under .maestro/ is a candidate flow, except helpers/,
+# which holds reusable sub-flows used via `runFlow` and must never run alone.
+flows:
+  - "**"
+  - "!helpers/**"
+
+# Run only the two intended suites. Select one explicitly with, e.g.:
+#   maestro test .maestro --include-tags smoke
+#   maestro test .maestro --include-tags living-room
+includeTags:
+  - smoke
+  - living-room

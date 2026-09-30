@@ -1,0 +1,10 @@
+# Generated run artifacts and screenshots — never committed.
+screenshots/
+reports/
+*.png
+*.log
+
+# Local, machine-specific flow inputs (device addresses, pairing material,
+# secrets). Never commit these.
+local/
+*.local.yaml
