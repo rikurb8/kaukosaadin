@@ -1,0 +1,17 @@
+# Gradle / Android build output
+.gradle/
+build/
+**/build/
+.kotlin/
+
+# Local SDK location and other machine-specific config
+local.properties
+
+# IDE / editor
+.idea/
+*.iml
+.DS_Store
+
+# Signing material — never commit
+*.jks
+*.keystore
