@@ -3,8 +3,10 @@
 Android remote for the living-room **LG G3** (webOS) and **Apple TV**, over the home
 network.
 
-**Current state: foundation only.** The app builds, installs, and opens a placeholder
-screen. It does not control anything yet — LG support lands in GOO-26 and Apple TV
+**Current state: dummy UI only.** The app builds, installs, and opens one remote screen:
+power keys for the LG TV and Apple TV on top, a source selector for which device the
+remote targets, and navigation (left/right/up/down, OK, Back). It does not control
+anything yet — the last command is echoed on the display, but nothing is sent to a TV. LG support lands in GOO-26 and Apple TV
 support in GOO-28; GOO-29 builds the shared remote screen, and GOO-30 validates it on the
 real devices.
 

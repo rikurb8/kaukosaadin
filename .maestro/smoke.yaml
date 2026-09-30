@@ -1,9 +1,20 @@
-# Smoke flow: the app installs, launches, and shows the placeholder screen.
+# Smoke flow: the app installs, launches, and shows the remote screen.
 # Uses no real device (LG TV / Apple TV), so it is safe to run anywhere.
+# Maestro matches text case-insensitively, so "Apple TV" also hits the
+# engraved "APPLE TV" power label — source taps are anchored below SOURCE.
 appId: fi.goodconsulting.kaukosaadin
 tags:
   - smoke
 ---
 - launchApp
-- assertVisible: "Kaukosäädin"
-- assertVisible: "No device controls yet.*"
+- assertVisible: "LG G3"
+- assertVisible: "Apple TV"
+- assertVisible: "NO COMMANDS YET"
+- tapOn: "OK"
+- assertVisible: "OK · LG G3 · NOT SENT"
+- tapOn: "Apple TV power"
+- assertVisible: "STANDBY · APPLE TV · NOT SENT"
+- tapOn:
+    text: "Apple TV"
+    below: "SOURCE"
+- assertVisible: "TVOS"
