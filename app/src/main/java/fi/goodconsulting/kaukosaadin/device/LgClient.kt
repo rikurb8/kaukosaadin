@@ -40,16 +40,23 @@ import javax.net.ssl.*
 class LgClient(context: Context) {
     data class Result(val ok: Boolean, val message: String)
     private val appContext = context.applicationContext
+    // ponytail: one saved TV; add a device list when multiple remotes are needed.
     private val prefs = appContext.getSharedPreferences("lg", Context.MODE_PRIVATE)
     private val mutableDevices = MutableStateFlow<List<TVDiscovery.DiscoveredTV>>(emptyList())
     val devices = mutableDevices.asStateFlow()
     private val lock = Mutex()
-    private val mutableStatus = MutableStateFlow(Result(false, "Select an LG TV, inspect its certificate and save approved setup."))
+    private val mutableStatus = MutableStateFlow(Result(false,
+        if (prefs.contains("fingerprint")) "TV not connected. Tap Connect TV with the TV awake."
+        else "Add a TV, inspect its certificate and save approved setup."))
     val status = mutableStatus.asStateFlow()
+    // Registration verified this run, not a live socket or TV power-state report.
+    private val mutableReady = MutableStateFlow(false)
+    val ready = mutableReady.asStateFlow()
     private val mutableAwaitingPin = MutableStateFlow(false)
     val awaitingPin = mutableAwaitingPin.asStateFlow()
     @Volatile private var pendingPin: PinChannel<String>? = null
     val host get() = prefs.getString("host", "")!!
+    val name get() = LgProtocol.tvName(prefs.getString("name", "")!!)
     val mac get() = prefs.getString("mac", "")!!
     val broadcast get() = prefs.getString("broadcast", "")!!
     val fingerprint get() = prefs.getString("fingerprint", "")!!
@@ -93,16 +100,30 @@ class LgClient(context: Context) {
             else "No LG TVs replied. Turn TV on, check same Wi-Fi/subnet and router isolation, retry or use saved/manual setup.")
     }
 
-    suspend fun save(address: String, pin: String) = operation {
+    suspend fun save(address: String, pin: String, displayName: String) = operation {
         val normalizedPin = LgProtocol.pairingFingerprint(address, pin)
         val addressChanged = host != address
         val changed = addressChanged || fingerprint != normalizedPin
         check(prefs.edit().putString("host", address).putString("fingerprint", normalizedPin)
+            .putString("name", LgProtocol.tvName(displayName))
             .apply {
                 if (changed) remove("key")
                 if (addressChanged) { remove("mac"); remove("broadcast") }
             }.commit()) { "Could not save setup. Try again." }
+        if (changed) mutableReady.value = false
         Result(true, "Setup saved. Connect with the TV awake to pair. Wake settings are optional.")
+    }
+
+    suspend fun saveName(address: String, displayName: String) = operation {
+        check(address == host && host.isNotEmpty()) { "Save this TV's setup before renaming it." }
+        check(prefs.edit().putString("name", LgProtocol.tvName(displayName)).commit()) { "Could not save TV name. Try again." }
+        Result(true, "TV name saved. Pairing is unchanged.")
+    }
+
+    suspend fun remove() = operation {
+        check(prefs.edit().clear().commit()) { "Could not remove TV. Try again." }
+        mutableReady.value = false
+        Result(true, "TV removed. Add a TV to start again.")
     }
 
     suspend fun saveWake(address: String, hardwareAddress: String, subnetBroadcast: String) = operation {
@@ -136,10 +157,14 @@ class LgClient(context: Context) {
 
     suspend fun forget() = operation {
         check(prefs.edit().remove("key").remove("fingerprint").commit()) { "Could not forget pairing." }
+        mutableReady.value = false
         Result(true, "Pairing and certificate forgotten. Inspect, approve, then connect again.")
     }
 
-    suspend fun connect() = operation { session(null) }
+    suspend fun connect() = operation {
+        mutableReady.value = false
+        session(null).also { mutableReady.value = it.ok }
+    }
 
     fun submitPin(pin: String): Result {
         try { LgProtocol.pinRequest(pin) } catch (e: IllegalArgumentException) {
@@ -172,6 +197,7 @@ class LgClient(context: Context) {
     }
 
     suspend fun send(action: LgProtocol.Action) = operation {
+        mutableReady.value = false
         if (action == LgProtocol.Action.Wake) {
             check(mac.isNotEmpty() && broadcast.isNotEmpty()) { "Save the TV's MAC and subnet broadcast in Wake settings first." }
             val packet = LgProtocol.magicPacket(mac)
@@ -181,7 +207,7 @@ class LgClient(context: Context) {
                 socket.send(DatagramPacket(packet, packet.size, target, 9))
             }
             Result(true, "Wake packet sent; TV wake NOT confirmed. Wait for TV, then Connect.")
-        } else session(action)
+        } else session(action).also { mutableReady.value = it.ok }
     }
 
     // ponytail: reconnect per press adds TLS latency; reuse a live session only if measured too slow.

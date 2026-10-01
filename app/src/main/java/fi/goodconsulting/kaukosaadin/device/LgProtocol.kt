@@ -9,6 +9,8 @@ object LgProtocol {
         Wake(null), Up("UP"), Down("DOWN"), Left("LEFT"), Right("RIGHT"), Select("ENTER"), Back("BACK")
     }
 
+    fun tvName(value: String): String = value.filterNot { it.isISOControl() }.trim().take(160).ifBlank { "LG TV" }
+
     fun ipv4(value: String): String {
         val parts = value.split('.')
         require(parts.size == 4 && parts.all { it.matches(Regex("0|[1-9][0-9]{0,2}")) && it.toInt() in 0..255 }) {

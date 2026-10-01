@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -37,6 +36,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -45,10 +45,12 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,10 +75,10 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -87,6 +89,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fi.goodconsulting.kaukosaadin.device.LgClient
+import fi.goodconsulting.kaukosaadin.device.LgProtocol
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
@@ -159,65 +164,97 @@ private val MaxDialSize = 264.dp
 private val FramedMinWidth = 480.dp
 private val FramedMaxWidth = 420.dp
 
-private enum class Device(val label: String, val powerLabel: String, val os: String) {
-    LgTv("LG G3", "LG TV", "WEBOS"),
-    AppleTv("Apple TV", "APPLE TV", "TVOS"),
-}
-
 /** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. */
-private enum class Direction(val label: String, val rotation: Float, val alignment: Alignment, val wedgeStart: Float) {
-    Up("Up", 0f, Alignment.TopCenter, -135f),
-    Right("Right", 90f, Alignment.CenterEnd, -45f),
-    Down("Down", 180f, Alignment.BottomCenter, 45f),
-    Left("Left", 270f, Alignment.CenterStart, 135f),
+private enum class Direction(val action: LgProtocol.Action, val rotation: Float, val alignment: Alignment, val wedgeStart: Float) {
+    Up(LgProtocol.Action.Up, 0f, Alignment.TopCenter, -135f),
+    Right(LgProtocol.Action.Right, 90f, Alignment.CenterEnd, -45f),
+    Down(LgProtocol.Action.Down, 180f, Alignment.BottomCenter, 45f),
+    Left(LgProtocol.Action.Left, 270f, Alignment.CenterStart, 135f),
+    ;
+    val label get() = action.name
 }
 
-/**
- * App root. UI lives in this `ui` package; device-network code will live in a
- * sibling `device` package (GOO-26 for LG, GOO-28 for Apple TV).
- */
+/** One LG client shares approved setup, pairing and readiness across both screens. */
 @Composable
 fun KaukosaadinApp() {
-    var lgTest by remember { mutableStateOf(false) }
+    val context = LocalContext.current.applicationContext
+    val client = remember { LgClient(context) }
+    val scope = rememberCoroutineScope()
+    val status by client.status.collectAsState()
+    val ready by client.ready.collectAsState()
+    var lgSettings by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<LgClient.Result?>(null) }
+    fun run(block: suspend () -> LgClient.Result) {
+        if (busy) return
+        busy = true
+        scope.launch { try { result = block() } finally { busy = false } }
+    }
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors) {
+        LgPinDialog(client)
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
         ) { innerPadding ->
-            if (lgTest) {
-                LgTestScreen(innerPadding) { lgTest = false }
+            if (lgSettings) {
+                LgConnectionScreen(innerPadding, client) { result = null; lgSettings = false }
+            } else if (client.host.isEmpty()) {
+                EmptyRemoteScreen(innerPadding, onAddTv = { lgSettings = true })
             } else {
-                RemoteScreen(contentPadding = innerPadding, onLgTest = { lgTest = true })
+                RemoteScreen(
+                    contentPadding = innerPadding,
+                    tvName = client.name,
+                    lgReady = ready,
+                    lgBusy = busy,
+                    lgWakeEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
+                    lgStatus = (if (busy) status else result ?: status).message,
+                    onLgConnect = {
+                        if (client.host.isEmpty() || client.fingerprint.isEmpty()) lgSettings = true
+                        else run { client.connect() }
+                    },
+                    onLgSettings = { lgSettings = true },
+                    onLgAction = { action -> run { client.send(action) } },
+                )
             }
         }
     }
 }
 
-/**
- * The remote: power keys for both devices on top, a display, the source
- * selector, and navigation. Every control is local state only — commands are
- * echoed on the display, nothing is sent to a TV yet (GOO-26/GOO-28).
- */
 @Composable
-fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, onLgTest: () -> Unit = {}) {
-    var activeDevice by remember { mutableStateOf(Device.LgTv) }
-    var lgTvOn by remember { mutableStateOf(true) }
-    var appleTvOn by remember { mutableStateOf(true) }
-    var lastCommand by remember { mutableStateOf("") }
-    // Bumped on every command so the TX lamp and annunciator blink once.
-    var txCount by remember { mutableIntStateOf(0) }
-
-    fun isOn(device: Device) = if (device == Device.LgTv) lgTvOn else appleTvOn
-
-    fun send(command: String, device: Device = activeDevice) {
-        lastCommand = "$command · ${device.label}"
-        txCount++
+private fun EmptyRemoteScreen(contentPadding: PaddingValues, onAddTv: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+    ) {
+        EngravedLabel("KAUKOSÄÄDIN")
+        Text("No TVs added", style = MaterialTheme.typography.headlineSmall)
+        Text("Add your TV to start using the remote.", style = MaterialTheme.typography.bodyMedium)
+        Button(onClick = onAddTv) { Text("Add TV") }
+        Text("Supports LG webOS TVs on your Wi-Fi", style = MaterialTheme.typography.bodySmall)
     }
+}
 
-    fun togglePower(device: Device) {
-        val on = !isOn(device)
-        if (device == Device.LgTv) lgTvOn = on else appleTvOn = on
-        send(if (on) "Power on" else "Standby", device)
+/** Only the actual saved TV appears; controls require verified registration. */
+@Composable
+private fun RemoteScreen(
+    contentPadding: PaddingValues,
+    tvName: String,
+    lgReady: Boolean,
+    lgBusy: Boolean,
+    lgWakeEnabled: Boolean,
+    lgStatus: String,
+    onLgConnect: () -> Unit,
+    onLgSettings: () -> Unit,
+    onLgAction: (LgProtocol.Action) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var txCount by remember { mutableIntStateOf(0) }
+    val navigationEnabled = lgReady && !lgBusy
+
+    fun send(action: LgProtocol.Action) {
+        txCount++
+        onLgAction(action)
     }
 
     val txFlash = remember { Animatable(0f) }
@@ -279,23 +316,31 @@ fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, o
                 verticalArrangement = if (framed) Arrangement.spacedBy(18.dp) else spacedEvenly(atLeast = 18.dp),
             ) {
             PowerDeck(
-                isOn = ::isOn,
+                lgReady = lgReady,
+                lgWakeEnabled = lgWakeEnabled && !lgBusy,
                 txFlash = { txFlash.value },
-                onPower = ::togglePower,
+                onWake = { send(LgProtocol.Action.Wake) },
             )
 
-            VfdDisplay(
-                device = activeDevice,
-                isOn = isOn(activeDevice),
-                status = if (lastCommand.isEmpty()) "NO COMMANDS YET"
-                else "${lastCommand.uppercase(Locale.US)} · NOT SENT",
-                txFlash = { txFlash.value },
-            )
-
-            SourceSelector(
-                active = activeDevice,
-                onSelect = { activeDevice = it },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                VfdDisplay(
+                    tvName = tvName,
+                    ready = lgReady,
+                    status = lgStatus.uppercase(Locale.US),
+                    txFlash = { txFlash.value },
+                )
+                Text(
+                    lgStatus,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+                Row {
+                    TextButton(onClick = onLgConnect, enabled = !lgBusy) {
+                        Text(if (lgReady) "Reconnect TV" else "Connect TV")
+                    }
+                    TextButton(onClick = onLgSettings, enabled = !lgBusy) { Text("TV settings") }
+                }
+            }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -304,14 +349,14 @@ fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, o
             ) {
                 Dpad(
                     diameter = dialSize,
-                    enabled = isOn(activeDevice),
-                    onPress = { send(it) },
+                    enabled = navigationEnabled,
+                    onPress = ::send,
                 )
                 Key(
-                    onClick = { send("Back") },
+                    onClick = { send(LgProtocol.Action.Back) },
                     shape = RoundedCornerShape(50),
                     face = colors.secondaryContainer,
-                    enabled = isOn(activeDevice),
+                    enabled = navigationEnabled,
                     elevation = 3.dp,
                     modifier = Modifier.size(width = dialSize - 24.dp, height = 44.dp),
                 ) {
@@ -320,7 +365,7 @@ fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, o
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                         letterSpacing = 2.sp,
-                        color = if (isOn(activeDevice)) colors.onSecondaryContainer else colors.onSurfaceVariant,
+                        color = if (navigationEnabled) colors.onSecondaryContainer else colors.onSurfaceVariant,
                     )
                 }
             }
@@ -330,7 +375,7 @@ fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, o
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                TextButton(onClick = onLgTest) { Text("LG client test") }
+                Text("Wake only · TV power is not monitored", style = MaterialTheme.typography.bodySmall)
                 SpeakerGrille()
                     EngravedLabel("MODEL KS-01 · UNIVERSAL")
                 }
@@ -339,19 +384,16 @@ fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, o
     }
 }
 
-/**
- * Top deck: a red power key per device, each with its own standby LED, and
- * the TX lamp plus wordmark between them. Power never depends on the source
- * selector — either device can be switched from here at any time.
- */
+/** Wake button for the saved TV; the LED indicates registration, not power. */
 @Composable
 private fun PowerDeck(
-    isOn: (Device) -> Boolean,
+    lgReady: Boolean,
+    lgWakeEnabled: Boolean,
     txFlash: () -> Float,
-    onPower: (Device) -> Unit,
+    onWake: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        PowerKey(Device.LgTv, isOn(Device.LgTv)) { onPower(Device.LgTv) }
+        PowerKey(lgReady, lgWakeEnabled, onWake)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -368,20 +410,20 @@ private fun PowerDeck(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
             )
         }
-        PowerKey(Device.AppleTv, isOn(Device.AppleTv)) { onPower(Device.AppleTv) }
     }
 }
 
 @Composable
-private fun PowerKey(device: Device, isOn: Boolean, onClick: () -> Unit) {
+private fun PowerKey(ready: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Column(
         modifier = Modifier.width(80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Led(isOn)
+        Led(ready)
         Key(
             onClick = onClick,
+            enabled = enabled,
             shape = CircleShape,
             face = PowerRed,
             elevation = 6.dp,
@@ -389,13 +431,13 @@ private fun PowerKey(device: Device, isOn: Boolean, onClick: () -> Unit) {
             modifier = Modifier
                 .size(58.dp)
                 .semantics {
-                    contentDescription = "${device.label} power"
-                    stateDescription = if (isOn) "On" else "Standby"
+                    contentDescription = "Wake TV"
+                    stateDescription = if (ready) "Registration verified" else "Not connected"
                 },
         ) {
             PowerGlyph(OnPowerRed, Modifier.size(22.dp))
         }
-        EngravedLabel(device.powerLabel)
+        EngravedLabel("WAKE")
     }
 }
 
@@ -424,7 +466,7 @@ private fun PowerGlyph(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** Standby LED: glowing green when on, a dark unlit bead in standby. */
+/** Registration LED: glowing green when verified, otherwise a dark unlit bead. */
 @Composable
 private fun Led(isOn: Boolean) {
     val color by animateColorAsState(if (isOn) LedOn else LedOff, label = "led")
@@ -470,12 +512,12 @@ private fun TxLamp(flash: () -> Float) {
 }
 
 /**
- * Amber VFD behind a smoked bezel: annunciators for target, power and TX on
+ * Amber VFD behind a smoked bezel: annunciators for target, readiness and TX on
  * top, the targeted device in large glowing type, and the command echo with
  * a blinking cursor.
  */
 @Composable
-private fun VfdDisplay(device: Device, isOn: Boolean, status: String, txFlash: () -> Float) {
+private fun VfdDisplay(tvName: String, ready: Boolean, status: String, txFlash: () -> Float) {
     val bezel = RoundedCornerShape(14.dp)
     Box(
         Modifier
@@ -495,23 +537,23 @@ private fun VfdDisplay(device: Device, isOn: Boolean, status: String, txFlash: (
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Annunciator("TV", lit = device == Device.LgTv)
-                Annunciator("ATV", lit = device == Device.AppleTv)
+                Annunciator("TV", lit = true)
                 Spacer(Modifier.weight(1f))
-                Annunciator("PWR", lit = isOn)
-                Annunciator("STBY", lit = !isOn)
+                Annunciator("READY", lit = ready)
+                Annunciator("SETUP", lit = !ready)
                 Annunciator("TX", lit = txFlash() > 0.05f)
             }
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = device.label.uppercase(Locale.US),
-                    // A device in standby dims to the secondary segment color.
-                    style = vfdStyle(MaterialTheme.typography.headlineSmall, if (isOn) LcdText else LcdDim),
+                    text = tvName.uppercase(Locale.US),
+                    style = vfdStyle(MaterialTheme.typography.headlineSmall, if (ready) LcdText else LcdDim),
                     letterSpacing = 2.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.weight(1f))
                 Text(
-                    text = device.os,
+                    text = "WEBOS",
                     style = vfdStyle(MaterialTheme.typography.labelMedium, LcdDim),
                     letterSpacing = 1.sp,
                     modifier = Modifier.padding(bottom = 4.dp),
@@ -585,77 +627,16 @@ private fun Modifier.vfdGlass() = drawWithContent {
 }
 
 /**
- * Latching source keys, like the mode buttons on an old universal remote: the
- * targeted device's key stays pushed in with its lamp lit.
- */
-@Composable
-private fun SourceSelector(active: Device, onSelect: (Device) -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        EngravedLabel("SOURCE")
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Device.entries.forEach { device ->
-                val isActive = device == active
-                Key(
-                    onClick = { onSelect(device) },
-                    shape = RoundedCornerShape(14.dp),
-                    face = colors.secondaryContainer,
-                    latched = isActive,
-                    elevation = 4.dp,
-                    role = Role.RadioButton,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(58.dp)
-                        .semantics { selected = isActive },
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        SourceLamp(isActive)
-                        Text(
-                            text = device.label,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.onSecondaryContainer,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SourceLamp(lit: Boolean) {
-    val glow = MaterialTheme.colorScheme.primary
-    val unlit = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.18f)
-    val color by animateColorAsState(if (lit) glow else unlit, label = "sourceLamp")
-    Canvas(Modifier.size(width = 22.dp, height = 4.dp)) {
-        val corner = CornerRadius(size.height / 2)
-        if (lit) {
-            drawRoundRect(
-                color = glow.copy(alpha = 0.3f),
-                topLeft = Offset(-3.dp.toPx(), -3.dp.toPx()),
-                size = Size(size.width + 6.dp.toPx(), size.height + 6.dp.toPx()),
-                cornerRadius = CornerRadius(size.height),
-            )
-        }
-        drawRoundRect(color, cornerRadius = corner)
-    }
-}
-
-/**
  * One-piece navigation wheel: a knurled bezel, four arrows printed on the face,
  * and a raised OK key seated in a recessed well. The quarter under a held
- * arrow darkens as if the wheel tilts. When the target device is in standby,
+ * arrow darkens as if the wheel tilts. Until LG registration is verified,
  * the whole wheel greys out and refuses input.
  */
 @Composable
 private fun Dpad(
     diameter: Dp,
     enabled: Boolean,
-    onPress: (String) -> Unit,
+    onPress: (LgProtocol.Action) -> Unit,
 ) {
     val okKeySize = diameter * 0.41f
     val arrowHitSize = diameter / 3
@@ -721,10 +702,10 @@ private fun Dpad(
                 modifier = Modifier
                     .align(direction.alignment)
                     .size(arrowHitSize),
-            ) { onPress(direction.label) }
+            ) { onPress(direction.action) }
         }
         Key(
-            onClick = { onPress("OK") },
+            onClick = { onPress(LgProtocol.Action.Select) },
             shape = CircleShape,
             face = colors.primary,
             enabled = enabled,
@@ -787,7 +768,7 @@ private fun DialArrow(
 
 /**
  * Raised key cap: lit-from-above gradient face, bevelled rim, drop shadow.
- * While held (or latched) the gradient flips so the cap reads as pushed in.
+ * While held the gradient flips so the cap reads as pushed in.
  */
 @Composable
 private fun Key(
@@ -796,15 +777,13 @@ private fun Key(
     face: Color,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    latched: Boolean = false,
     elevation: Dp = 4.dp,
-    role: Role = Role.Button,
     haptic: Int = HapticFeedbackConstants.KEYBOARD_TAP,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val down = pressed || latched
+    val down = pressed
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.94f else 1f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 600f),
@@ -838,7 +817,7 @@ private fun Key(
                 interactionSource = interaction,
                 indication = null,
                 enabled = enabled,
-                role = role,
+                role = Role.Button,
             ) {
                 view.performHapticFeedback(haptic)
                 onClick()

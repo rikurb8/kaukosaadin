@@ -1,15 +1,25 @@
 # Kaukosäädin
 
-Android remote for the living-room **LG G3** (webOS) and **Apple TV**, over the home
-network.
+Android remote for **LG webOS TVs** over your home network.
 
-**Current state:** the main remote remains simulated (nothing sent). Its **LG client test**
-button opens the real GOO-26 client: automatic LG discovery/device selection, independent
-Wake-on-LAN plus navigation, certificate approval and encrypted PIN pairing.
-**Connect / pair LG** requests an on-TV PIN to enter on the phone, not physical-remote
-prompt approval. Saved pairing is reused; unsupported PIN mode is reported without fallback. Hardware validation is still pending;
-see [LG verification and operator handoff](docs/lg-g3.md). Apple TV support is GOO-28;
-GOO-29 owns integration into the shared remote.
+Fresh installs show **No TVs added**, not a pre-filled remote. Tap **Add TV** to discover
+and select a TV (or enter its IPv4 address), approve its certificate and pair with its
+on-screen PIN. Successful pairing opens the main remote. Discovery supplies the TV's
+advertised display name when available; **TV name** is editable and saved with setup.
+**Save TV name** renames an existing TV without changing pairing. Old saved setups remain
+usable and default to “LG TV” until named. **Remove TV** requires confirmation and returns
+to the empty state; **Forget LG pairing and certificate** only resets trust/pairing.
+
+The app currently saves one TV. No fixed LG G3 or Apple TV slots are shown. **Connect TV**
+reuses saved pairing, and **TV settings** allows changing setup and optional Wake-on-LAN
+settings. The arrows, **OK** and **BACK** send real commands; navigation is disabled before
+connecting, while busy and after a failed command. Commands are never replayed automatically.
+**Wake TV** is wake-only, enabled with saved MAC/broadcast settings. After waking, wait
+for the TV and tap Connect. READY/LEDs indicate verified registration, not TV power or a
+persistent socket. Apple TV support is pending GOO-28, with no placeholder controls.
+
+PIN pairing and saved-pairing reconnect have been operator-verified on the LG G3.
+See [LG verification and operator handoff](docs/lg-g3.md) for physical-action checks.
 
 ## Repository layout
 
@@ -113,8 +123,9 @@ maestro test --device R3GL204147Z .maestro --include-tags smoke
 - The app must already be installed on the device — build and install first (above).
 - `.maestro/config.yaml` includes only the `smoke` and `living-room` suites and excludes
   `.maestro/helpers/**` from discovery, so helper sub-flows never run on their own.
-- `living-room` covers the real LG TV / Apple TV and arrives with GOO-29; select it with
-  `--include-tags living-room` (it is not run from this issue).
+- `living-room` is reserved for supervised real-TV checks; no automated living-room
+  suite is present yet. Smoke only checks UI/disabled controls and opens setup; it
+  never pairs, changes saved trust, wakes or sends navigation.
 - Generated reports/screenshots and local environment files are git-ignored. Never commit
   real device addresses, pairing material, or secrets.
 

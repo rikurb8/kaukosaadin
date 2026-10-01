@@ -7,7 +7,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -15,14 +15,9 @@ import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
 import kotlinx.coroutines.launch
 
-/** Temporary client exerciser for GOO-26; GOO-29 owns the final remote integration. */
+/** Shared by setup and the main remote's saved-TV reconnect button. */
 @Composable
-fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
-    val context = LocalContext.current.applicationContext
-    val client = remember { LgClient(context) }
-    val scope = rememberCoroutineScope()
-    val status by client.status.collectAsState()
-    val devices by client.devices.collectAsState()
+fun LgPinDialog(client: LgClient) {
     val awaitingPin by client.awaitingPin.collectAsState()
     var pin by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
@@ -51,8 +46,19 @@ fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
             dismissButton = { TextButton(onClick = { client.cancelPairing() }) { Text("Cancel pairing") } },
         )
     }
+}
+
+@Composable
+fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val status by client.status.collectAsState()
+    val devices by client.devices.collectAsState()
+    val ready by client.ready.collectAsState()
+    BackHandler(onBack = onBack)
     var manualAddress by remember { mutableStateOf(false) }
     var host by remember { mutableStateOf(client.host) }
+    var name by remember { mutableStateOf(client.name) }
+    var confirmRemove by remember { mutableStateOf(false) }
     var mac by remember { mutableStateOf(client.mac) }
     var broadcast by remember { mutableStateOf(client.broadcast) }
     var fingerprint by remember { mutableStateOf(client.fingerprint) }
@@ -73,10 +79,25 @@ fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
         fingerprint.isNotEmpty() && fingerprint == client.fingerprint
     val wakeSaved = setupSaved && mac.isNotEmpty() && broadcast.isNotEmpty() &&
         mac == client.mac && broadcast == client.broadcast
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Remove TV?") },
+            text = { Text("This removes the saved TV, pairing and wake settings. You'll need to add and pair it again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    run { client.remove().also { if (it.ok) onBack() } }
+                }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+        )
+    }
     Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("LG G3 client test", style = MaterialTheme.typography.titleLarge)
-        Text("Wake only — no power-off. Apple TV is not involved. Use a trusted home LAN.")
+        Text("TV setup", style = MaterialTheme.typography.titleLarge)
+        TextButton(onClick = onBack) { Text("Done") }
+        Text("Supports LG webOS TVs on a trusted home LAN. Wake only — no power-off.")
         Button(enabled = !busy, onClick = { run { client.discover() } }) { Text("Find LG TVs") }
         Text((if (busy) status else result ?: status).message)
         devices.forEach { tv ->
@@ -84,6 +105,7 @@ fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
                 if (host != tv.ip) {
                     host = tv.ip; mac = ""; broadcast = ""; fingerprint = ""; approved = false
                 }
+                name = if (tv.name == tv.ip) "LG TV" else tv.name
             }) { Text("${tv.name} · ${tv.ip}") }
         }
         Text("Selected TV: ${host.ifEmpty { "none" }}")
@@ -91,8 +113,15 @@ fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
         TextButton(enabled = !busy, onClick = { manualAddress = !manualAddress }) { Text("Manual address fallback") }
         if (manualAddress) {
             OutlinedTextField(host, {
-                host = it; mac = ""; broadcast = ""; approved = false; fingerprint = ""
+                host = it; name = "LG TV"; mac = ""; broadcast = ""; approved = false; fingerprint = ""
             }, label = { Text("TV IPv4 address") }, enabled = !busy)
+        }
+        if (host.isNotEmpty()) {
+            OutlinedTextField(name, { name = it }, label = { Text("TV name") }, enabled = !busy, singleLine = true)
+            Text("Discovery provides a display name, not proof of identity. Rename it if you like.")
+            if (host == client.host) {
+                OutlinedButton(enabled = !busy, onClick = { run { client.saveName(host, name) } }) { Text("Save TV name") }
+            }
         }
         Text("Pairing: inspect certificate → approve → save → Connect → enter the TV PIN. No MAC or broadcast needed.")
         Button(enabled = !busy && host.isNotEmpty(), onClick = {
@@ -109,14 +138,19 @@ fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
             Checkbox(approved, { approved = it }, enabled = !busy && fingerprint.isNotEmpty())
             Text("I verified this TV certificate", Modifier.padding(top = 12.dp))
         }
-        Button(enabled = !busy && approved, onClick = { run { client.save(host, fingerprint) } }) {
+        Button(enabled = !busy && approved, onClick = { run { client.save(host, fingerprint, name) } }) {
             Text("Save approved setup")
         }
-        Button(enabled = !busy && setupSaved, onClick = { run { client.connect() } }) { Text("Connect / pair LG") }
+        Button(enabled = !busy && setupSaved, onClick = {
+            run {
+                val named = client.saveName(host, name)
+                if (named.ok) client.connect().also { if (it.ok) onBack() } else named
+            }
+        }) { Text("Connect / pair LG") }
         Text((if (busy) status else result ?: status).message)
         if (!setupSaved) Text("Inspect, approve and save this TV's certificate to enable Connect / pair LG.")
-        LgProtocol.Action.entries.filter { it != LgProtocol.Action.Wake }.forEach { action ->
-            Button(enabled = !busy && setupSaved, onClick = { run { client.send(action) } }) { Text("LG ${action.name}") }
+        if (ready && setupSaved) {
+            Button(enabled = !busy, onClick = onBack) { Text("Use LG remote") }
         }
         Text("Wake settings (optional for pairing/navigation)", style = MaterialTheme.typography.titleMedium)
         Text("SSDP does not provide a wake MAC. Enter the TV's active network MAC and subnet broadcast only for wake.")
@@ -135,6 +169,9 @@ fun LgTestScreen(padding: PaddingValues, onBack: () -> Unit) {
                 forgotten
             }
         }) { Text("Forget LG pairing and certificate") }
-        TextButton(onClick = onBack, enabled = !busy) { Text("Back to simulated remote") }
+        if (client.host.isNotEmpty()) {
+            TextButton(enabled = !busy, onClick = { confirmRemove = true }) { Text("Remove TV") }
+        }
+        TextButton(onClick = onBack) { Text("Done") }
     }
 }

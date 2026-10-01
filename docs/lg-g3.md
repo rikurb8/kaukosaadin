@@ -1,14 +1,59 @@
 # GOO-26 — LG G3 client and verification
 
-## Implemented, not hardware verified
+## Main remote integration
 
-Open **LG client test** on the simulated remote. Seven real actions are available:
-Wake, Up, Down, Left, Right, Select (webOS `ENTER`), Back. Main remote controls remain
-simulated until GOO-29. No Apple TV connection or HDMI-CEC is used by LG wake.
+The operator has confirmed that the main LG remote works. Exact tested actions and
+standby/recovery observations were not provided; build/UI tests do not prove TV movement.
+
+Fresh installs show **No TVs added** and **Add TV**, with no remote or fixed device slots.
+Setup retains discovery, manual IPv4, certificate approval, PIN entry and optional wake
+settings. Selecting a discovery result fills **TV name** from its advertised name (or
+“LG TV” if absent); the editable name is saved with approved setup. **Save TV name** updates
+metadata without clearing trust/pairing. Existing installations keep their credentials
+and use “LG TV” until a name is saved. Names are bounded/sanitized labels, not trusted identity.
+
+Successful **Connect / pair LG** returns to the named main remote automatically. **Done**
+also returns without connecting. **Connect TV** reconnects with saved trust/pairing, while
+**TV settings** permits changing setup. **Remove TV** confirms before clearing the TV,
+name, pairing and wake settings and returning to the empty state; Forget only clears
+pairing/certificate. One TV is saved at a time; there is no speculative device framework.
+The main arrows, OK (`ENTER`) and BACK use the same client, not simulated state.
+
+Navigation requires successful registration in this app run and is disabled while busy,
+after failed navigation, after changing/forgetting saved trust, and after Wake until
+explicit Connect. No navigation is queued or replayed. READY and the LG LED indicate
+registration, not monitored power or a persistent connection. The LG power key only
+sends Wake-on-LAN when wake settings are saved; it does not toggle standby. Apple TV
+controls and the hard-coded source selector have been removed. No Apple TV connection
+or HDMI-CEC is used by LG wake.
+
+Smoke checks disabled controls and setup/back navigation without changing pairing or
+sending TV commands. The discovery helper checks setup scanning and manual fallback.
+
+Integration validation: unit tests, debug APK build, lint, updated Maestro smoke and
+LG discovery helper all PASS. Installed on the connected Galaxy S25 with `adb install -r`,
+preserving app data. Confirmed main-page layout and Android Back returning from setup.
+No PIN was submitted, saved trust changed, wake sent or navigation sent during these
+checks. The operator subsequently reported that the main controls work; exact action
+observations and wake/recovery behavior are still not recorded.
+
+Named-TV validation: build, unit tests (including name sanitization), lint, updated smoke
+and discovery/name-entry helper PASS on the Galaxy S25. An isolated disposable application
+ID verified the fresh empty state, saved-name display, rename persistence across restart,
+and Remove cancellation/confirmation followed by the persistent empty state. Synthetic
+pairing/certificate/address/wake values were unchanged by rename and cleared only by
+confirmed removal. The test app was uninstalled; the normal APK was rebuilt and installed
+with `adb install -r`, preserving the operator's real pairing/setup. No TV commands or
+pairing requests were sent. APK SHA-256:
+`02ebacd93cb514a5c4ab14f1cabe4bd1f1bdab2a1a364102ab666b8a393bb5e9`.
+
+## Client behavior
 
 `device/LgClient.kt` exposes `status: StateFlow<Result>` and suspend `save`, `inspect`,
-`connect`, `send(Action)`, `forget` methods. `save(address, fingerprint)` is independent
-of wake; `saveWake(address, mac, broadcast)` configures only Wake-on-LAN. PIN input uses
+`connect`, `send(Action)`, `forget` methods. `ready: StateFlow<Boolean>` tracks successful
+registration for the main control gate (not TV power). `name` exposes the saved label;
+`saveName(address, name)` renames without touching pairing and `remove()` clears all saved
+TV settings. `save(address, fingerprint, name)` is independent of wake; `saveWake(address, mac, broadcast)` configures only Wake-on-LAN. PIN input uses
 `awaitingPin`, `submitPin(code)` and `cancelPairing()` on the same registration connection. `Result.ok` means the operation completed,
 NOT that the TV woke or moved selection. Call from a lifecycle-owned coroutine.
 Networking runs on Dispatchers.IO. Concurrent operations are refused, not queued;
@@ -82,8 +127,8 @@ TTL API works on our Android 29 floor, unlike upstream `DatagramSocket.setOption
 TTL/MX are 1 for same-subnet discovery, keeping the three upstream search rounds.
 A Wi-Fi multicast lock exists only during scanning. The normal scan deadline is 6 seconds.
 
-Opening the LG screen automatically scans for awake TVs; **Find LG TVs** retries.
-Selecting an untrusted advertisement populates the IPv4 address only. Discovery cannot
+Opening **TV settings** automatically scans for awake TVs; **Find LG TVs** retries.
+Selecting an untrusted advertisement populates the IPv4 address and draft display name only. Discovery cannot
 prove identity and never pairs, approves a certificate or sends a TV command. Untrusted
 LOCATION URLs are retained as metadata but never fetched. Sleeping devices may not
 answer, so saved setup persists and **Manual address fallback** remains available.

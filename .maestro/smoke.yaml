@@ -1,20 +1,55 @@
-# Smoke flow: the app installs, launches, and shows the remote screen.
-# Uses no real device (LG TV / Apple TV), so it is safe to run anywhere.
-# Maestro matches text case-insensitively, so "Apple TV" also hits the
-# engraved "APPLE TV" power label — source taps are anchored below SOURCE.
+# Covers both a fresh install and an existing saved TV without erasing pairing.
+# No pairing, wake or navigation; setup only scans for LG advertisements.
 appId: fi.goodconsulting.kaukosaadin
 tags:
   - smoke
 ---
-- launchApp
-- assertVisible: "LG G3"
-- assertVisible: "Apple TV"
-- assertVisible: "NO COMMANDS YET"
-- tapOn: "OK"
-- assertVisible: "OK · LG G3 · NOT SENT"
-- tapOn: "Apple TV power"
-- assertVisible: "STANDBY · APPLE TV · NOT SENT"
+- stopApp
+- launchApp:
+    clearState: false
+- assertNotVisible: "Apple TV power"
+- assertNotVisible: "SOURCE"
+- runFlow:
+    when:
+      visible: "No TVs added"
+    commands:
+      - assertNotVisible: "OK"
+      - assertNotVisible: "Wake TV"
+      - tapOn: "Add TV"
+- runFlow:
+    when:
+      visible: "TV settings"
+    commands:
+      - assertVisible: "WEBOS"
+      - assertVisible:
+          enabled: false
+          containsChild:
+            text: "OK"
+      - assertVisible:
+          text: "Up"
+          enabled: false
+      - assertVisible:
+          enabled: false
+          containsChild:
+            text: "BACK"
+      - tapOn: "TV settings"
+- assertVisible: "TV setup"
+- assertVisible: "Find LG TVs"
 - tapOn:
-    text: "Apple TV"
-    below: "SOURCE"
-- assertVisible: "TVOS"
+    text: "Done"
+    index: 0
+- runFlow:
+    when:
+      visible: "No TVs added"
+    commands:
+      - assertVisible: "Add TV"
+      - assertNotVisible: "OK"
+- runFlow:
+    when:
+      visible: "TV settings"
+    commands:
+      - assertVisible: "WEBOS"
+      - assertVisible:
+          enabled: false
+          containsChild:
+            text: "OK"
