@@ -40,6 +40,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -177,12 +178,17 @@ private enum class Direction(val label: String, val rotation: Float, val alignme
  */
 @Composable
 fun KaukosaadinApp() {
+    var lgTest by remember { mutableStateOf(false) }
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
         ) { innerPadding ->
-            RemoteScreen(contentPadding = innerPadding)
+            if (lgTest) {
+                LgTestScreen(innerPadding) { lgTest = false }
+            } else {
+                RemoteScreen(contentPadding = innerPadding, onLgTest = { lgTest = true })
+            }
         }
     }
 }
@@ -193,7 +199,7 @@ fun KaukosaadinApp() {
  * echoed on the display, nothing is sent to a TV yet (GOO-26/GOO-28).
  */
 @Composable
-fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier) {
+fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier, onLgTest: () -> Unit = {}) {
     var activeDevice by remember { mutableStateOf(Device.LgTv) }
     var lgTvOn by remember { mutableStateOf(true) }
     var appleTvOn by remember { mutableStateOf(true) }
@@ -324,6 +330,7 @@ fun RemoteScreen(contentPadding: PaddingValues, modifier: Modifier = Modifier) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                TextButton(onClick = onLgTest) { Text("LG client test") }
                 SpeakerGrille()
                     EngravedLabel("MODEL KS-01 · UNIVERSAL")
                 }

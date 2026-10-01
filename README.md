@@ -3,12 +3,13 @@
 Android remote for the living-room **LG G3** (webOS) and **Apple TV**, over the home
 network.
 
-**Current state: dummy UI only.** The app builds, installs, and opens one remote screen:
-power keys for the LG TV and Apple TV on top, a source selector for which device the
-remote targets, and navigation (left/right/up/down, OK, Back). It does not control
-anything yet — the last command is echoed on the display, but nothing is sent to a TV. LG support lands in GOO-26 and Apple TV
-support in GOO-28; GOO-29 builds the shared remote screen, and GOO-30 validates it on the
-real devices.
+**Current state:** the main remote remains simulated (nothing sent). Its **LG client test**
+button opens the real GOO-26 client: automatic LG discovery/device selection, independent
+Wake-on-LAN plus navigation, certificate approval and encrypted PIN pairing.
+**Connect / pair LG** requests an on-TV PIN to enter on the phone, not physical-remote
+prompt approval. Saved pairing is reused; unsupported PIN mode is reported without fallback. Hardware validation is still pending;
+see [LG verification and operator handoff](docs/lg-g3.md). Apple TV support is GOO-28;
+GOO-29 owns integration into the shared remote.
 
 ## Repository layout
 
@@ -44,13 +45,15 @@ no DI framework, no multi-module setup, and no generic device abstraction.
 ## Network permissions
 
 - `android.permission.INTERNET` — declared now as the baseline for home-LAN traffic.
-- **Local network access:** on Android 16 (`targetSdk 36`), reaching LAN devices still only
-  needs `INTERNET`. Starting with Android 17 (API 37), apps must also declare the
-  `android.permission.ACCESS_LOCAL_NETWORK` **runtime** permission
-  ([docs](https://developer.android.com/privacy-and-security/local-network-permission)).
-  That runtime request is added together with the device clients (GOO-26/GOO-28), which is
-  also where any cleartext/HTTP exception for a specific device host will be scoped.
-- No network-security config is relaxed in this issue.
+- **Local network access:** this app targets 36, so `INTERNET` suffices on Android 16
+  and receives legacy LAN access on Android 17. Do **not** request
+  `ACCESS_LOCAL_NETWORK` before targeting 37. A target-37 upgrade must declare and
+  request it before any client network operation
+  ([platform guidance](https://developer.android.com/privacy-and-security/local-network-permission)).
+  Android 16's optional `RESTRICT_LOCAL_NETWORK` developer flag is not enabled by this app.
+- `CHANGE_WIFI_MULTICAST_STATE` allows a Wi-Fi multicast lock during the bounded SSDP scan.
+- LG uses TLS with an explicitly approved certificate pin. No cleartext exception,
+  trust-all connection, or silent security downgrade.
 
 ## Prerequisites
 
@@ -128,7 +131,19 @@ Maestro cannot dismiss a secure lock screen.
 | Install + launch | PASS — `adb install -r` returned `Success`; `MainActivity` was the resumed activity and `logcat -b crash` was empty |
 | Maestro smoke | PASS — `maestro test --device R3GL204147Z .maestro --include-tags smoke` → `1/1 Flow Passed`, Maestro CLI 2.11.0, phone unlocked |
 
-## Not part of this issue
+## LG client checks
 
-No CI, no multi-module architecture, no device protocols/discovery/pairing, no device
-libraries, and no relaxed network security.
+```bash
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+```
+
+GOO-26 uses OkHttp for Android WebSockets and platform Android Keystore for pairing.
+The upstream lgtv-kotlin SSDP scanner is copied with attribution and small Android/safety
+fixes; no additional dependency or discovery stack. Sleeping TVs retain saved setup and
+manual fallback. MAC/subnet broadcast still need operator input for wake.
+No bridge, cloud execution, power-off, or generic device framework.
+
+Discovery UI check (no pairing or TV commands):
+```bash
+maestro test --device <serial> .maestro/helpers/lg-discovery.yaml
+```

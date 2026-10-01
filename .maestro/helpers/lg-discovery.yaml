@@ -1,0 +1,24 @@
+# Manual GOO-26 client check; excluded from suite discovery. No pairing or TV commands.
+appId: fi.goodconsulting.kaukosaadin
+---
+- launchApp:
+    clearState: false
+- scrollUntilVisible:
+    element:
+      text: "LG client test"
+    direction: DOWN
+- tapOn: "LG client test"
+- assertVisible: "LG G3 client test"
+- extendedWaitUntil:
+    visible: "(Found .* LG TV.*|No LG TVs replied.*|LG unreachable or timed out.*)"
+    timeout: 15000
+- assertVisible: "Find LG TVs"
+- runFlow:
+    when:
+      visible: "Found .* LG TV.*"
+    commands:
+      - tapOn:
+          text: '.* · [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+      - assertVisible: 'Selected TV: [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+'
+- tapOn: "Manual address fallback"
+- assertVisible: "TV IPv4 address"

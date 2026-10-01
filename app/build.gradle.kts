@@ -42,6 +42,9 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.okhttp)
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
