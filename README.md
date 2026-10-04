@@ -1,8 +1,8 @@
 # Kaukosäädin
 
-Android remote for **LG webOS TVs** over your home network.
+Android remote for **LG webOS TVs** and **Apple TV** over your home network.
 
-Fresh installs show **No TVs added**, not a pre-filled remote. Tap **Add TV** to discover
+Fresh installs show **No TVs added**, not a pre-filled remote. Tap **Add LG TV** to discover
 and select a TV (or enter its IPv4 address), approve its certificate and pair with its
 on-screen PIN. Successful pairing opens the main remote. Discovery supplies the TV's
 advertised display name when available; **TV name** is editable and saved with setup.
@@ -10,13 +10,22 @@ advertised display name when available; **TV name** is editable and saved with s
 usable and default to “LG TV” until named. **Remove TV** requires confirmation and returns
 to the empty state; **Forget LG pairing and certificate** only resets trust/pairing.
 
-The app currently saves one TV. No fixed LG G3 or Apple TV slots are shown. **Connect TV**
+The app saves one LG TV and one Apple TV; the **LG TV / Apple TV** switch on the remote
+picks which one the keys drive (selecting one that isn't set up opens its setup). **Connect TV**
 reuses saved pairing, and **TV settings** allows changing setup and optional Wake-on-LAN
 settings. The arrows, **OK** and **BACK** send real commands; navigation is disabled before
 connecting, while busy and after a failed command. Commands are never replayed automatically.
 **Wake TV** is wake-only, enabled with saved MAC/broadcast settings. After waking, wait
 for the TV and tap Connect. READY/LEDs indicate verified registration, not TV power or a
-persistent socket. Apple TV support is pending GOO-28, with no placeholder controls.
+persistent socket.
+
+**Add Apple TV** (or **Apple TV settings**) scans for Companion services, pairs with the
+PIN the Apple TV shows and can forget the pairing. Its remote has arrows, **OK**, **BACK**
+(Menu), **HOME** (TV) and **Play/Pause**; BACK/HOME also take double tap and a 1 s hold. Each press
+connects, verifies the saved pairing and waits for the Apple TV's acknowledgment; nothing
+is queued or replayed. There is no Apple TV wake. Pairing and Home/Menu tap, double tap
+and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25. See [Apple TV Companion](docs/apple-tv-companion.md); a debug-only
+crypto gate and discovery screen remain there.
 
 PIN pairing and saved-pairing reconnect have been operator-verified on the LG G3.
 See [LG verification and operator handoff](docs/lg-g3.md) for physical-action checks.
@@ -27,7 +36,7 @@ See [LG verification and operator handoff](docs/lg-g3.md) for physical-action ch
 | --- | --- |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/MainActivity.kt` | Single activity; hosts Compose |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/ui/` | Compose UI (screens and components) |
-| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | Device-network clients (LG, Apple TV) — added in GOO-26/GOO-28 |
+| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses |
 | `.maestro/` | Maestro flows and workspace configuration |
 
 UI and device-network code live in separate packages in the single `app` module. There is

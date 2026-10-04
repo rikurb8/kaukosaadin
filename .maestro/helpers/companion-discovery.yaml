@@ -1,0 +1,17 @@
+# Launch CompanionDiscoveryActivity with ADB first (see docs/apple-tv-companion.md).
+# Read-only LAN discovery; preserves saved setup and sends no pairing/TV commands.
+appId: fi.goodconsulting.kaukosaadin
+---
+- assertVisible: "Companion discovery"
+- tapOn: "Scan Companion services"
+- tapOn: "Cancel scan"
+- extendedWaitUntil:
+    visible: "Scan cancelled"
+    timeout: 10000
+- repeat:
+    times: 2
+    commands:
+      - tapOn: "Scan Companion services"
+      - extendedWaitUntil:
+          visible: "Scan complete: [0-9]+ Companion service\\(s\\)"
+          timeout: 15000

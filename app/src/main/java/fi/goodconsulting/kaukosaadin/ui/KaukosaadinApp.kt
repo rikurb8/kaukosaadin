@@ -15,6 +15,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -39,6 +40,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -50,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,6 +96,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionDiscovery
+import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
+import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.PI
@@ -164,56 +173,116 @@ private val MaxDialSize = 264.dp
 private val FramedMinWidth = 480.dp
 private val FramedMaxWidth = 420.dp
 
-/** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. */
-private enum class Direction(val action: LgProtocol.Action, val rotation: Float, val alignment: Alignment, val wedgeStart: Float) {
-    Up(LgProtocol.Action.Up, 0f, Alignment.TopCenter, -135f),
-    Right(LgProtocol.Action.Right, 90f, Alignment.CenterEnd, -45f),
-    Down(LgProtocol.Action.Down, 180f, Alignment.BottomCenter, 45f),
-    Left(LgProtocol.Action.Left, 270f, Alignment.CenterStart, 135f),
-    ;
-    val label get() = action.name
+/** The saved device the remote drives; each keeps its own pairing and status. */
+private enum class Target(val label: String, val annunciator: String, val platform: String) {
+    Lg("LG TV", "TV", "WEBOS"),
+    AppleTv("Apple TV", "ATV", "TVOS"),
 }
 
-/** One LG client shares approved setup, pairing and readiness across both screens. */
+/** Remote keys and the command each target sends; LG has no Home or Play/Pause key. */
+private enum class RemoteKey(val lg: LgProtocol.Action?, val hid: HidCommand) {
+    Up(LgProtocol.Action.Up, HidCommand.Up),
+    Down(LgProtocol.Action.Down, HidCommand.Down),
+    Left(LgProtocol.Action.Left, HidCommand.Left),
+    Right(LgProtocol.Action.Right, HidCommand.Right),
+    Select(LgProtocol.Action.Select, HidCommand.Select),
+    Back(LgProtocol.Action.Back, HidCommand.Menu),
+    Home(null, HidCommand.Home),
+    PlayPause(null, HidCommand.PlayPause),
+}
+
+/** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. */
+private enum class Direction(val key: RemoteKey, val rotation: Float, val alignment: Alignment, val wedgeStart: Float) {
+    Up(RemoteKey.Up, 0f, Alignment.TopCenter, -135f),
+    Right(RemoteKey.Right, 90f, Alignment.CenterEnd, -45f),
+    Down(RemoteKey.Down, 180f, Alignment.BottomCenter, 45f),
+    Left(RemoteKey.Left, 270f, Alignment.CenterStart, 135f),
+    ;
+    val label get() = key.name
+}
+
+/**
+ * One LG client and one Apple TV client share setup, pairing and readiness across
+ * the screens; the remote drives whichever saved device is the selected target.
+ */
 @Composable
 fun KaukosaadinApp() {
     val context = LocalContext.current.applicationContext
     val client = remember { LgClient(context) }
+    val apple = remember { CompanionClient(context) }
+    val discovery = remember { CompanionDiscovery(context) }
     val scope = rememberCoroutineScope()
     val status by client.status.collectAsState()
     val ready by client.ready.collectAsState()
+    val appleStatus by apple.status.collectAsState()
+    val applePaired by apple.paired.collectAsState()
     var lgSettings by remember { mutableStateOf(false) }
+    var appleSettings by remember { mutableStateOf(false) }
+    var selected by rememberSaveable { mutableStateOf(Target.Lg) }
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<LgClient.Result?>(null) }
-    fun run(block: suspend () -> LgClient.Result) {
+    var appleResult by remember { mutableStateOf<CompanionClient.Result?>(null) }
+    fun run(block: suspend () -> Unit) {
         if (busy) return
         busy = true
-        scope.launch { try { result = block() } finally { busy = false } }
+        scope.launch { try { block() } finally { busy = false } }
+    }
+    val lgSaved = client.host.isNotEmpty()
+    // Fall back to whichever device is actually saved, e.g. after removing the other.
+    val target = when {
+        selected == Target.Lg && !lgSaved && applePaired -> Target.AppleTv
+        selected == Target.AppleTv && !applePaired && lgSaved -> Target.Lg
+        else -> selected
+    }
+    fun openSettings(to: Target) {
+        selected = to
+        if (to == Target.Lg) lgSettings = true else appleSettings = true
     }
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors) {
         LgPinDialog(client)
+        AppleTvPinDialog(apple)
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
         ) { innerPadding ->
             if (lgSettings) {
                 LgConnectionScreen(innerPadding, client) { result = null; lgSettings = false }
-            } else if (client.host.isEmpty()) {
-                EmptyRemoteScreen(innerPadding, onAddTv = { lgSettings = true })
+            } else if (appleSettings) {
+                AppleTvSetupScreen(innerPadding, apple, discovery) { appleResult = null; appleSettings = false }
+            } else if (!lgSaved && !applePaired) {
+                EmptyRemoteScreen(innerPadding, onAdd = ::openSettings)
+            } else if (target == Target.Lg) {
+                RemoteScreen(
+                    contentPadding = innerPadding,
+                    target = target,
+                    tvName = client.name,
+                    ready = ready,
+                    busy = busy,
+                    wakeEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
+                    status = (if (busy) status else result ?: status).message,
+                    onTarget = { if (it == Target.Lg || applePaired) selected = it else openSettings(it) },
+                    onConnect = {
+                        if (client.host.isEmpty() || client.fingerprint.isEmpty()) lgSettings = true
+                        else run { result = client.connect() }
+                    },
+                    onSettings = { lgSettings = true },
+                    onWake = { run { result = client.send(LgProtocol.Action.Wake) } },
+                    onKey = { key, _ -> key.lg?.let { action -> run { result = client.send(action) } } },
+                )
             } else {
                 RemoteScreen(
                     contentPadding = innerPadding,
-                    tvName = client.name,
-                    lgReady = ready,
-                    lgBusy = busy,
-                    lgWakeEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
-                    lgStatus = (if (busy) status else result ?: status).message,
-                    onLgConnect = {
-                        if (client.host.isEmpty() || client.fingerprint.isEmpty()) lgSettings = true
-                        else run { client.connect() }
-                    },
-                    onLgSettings = { lgSettings = true },
-                    onLgAction = { action -> run { client.send(action) } },
+                    target = target,
+                    tvName = apple.name,
+                    ready = applePaired,
+                    busy = busy,
+                    wakeEnabled = false,
+                    status = (if (busy) appleStatus else appleResult ?: appleStatus).message,
+                    onTarget = { if (it == Target.AppleTv || lgSaved) selected = it else openSettings(it) },
+                    onConnect = null,
+                    onSettings = { appleSettings = true },
+                    onWake = {},
+                    onKey = { key, action -> run { appleResult = apple.press(key.hid, action) } },
                 )
             }
         }
@@ -221,7 +290,7 @@ fun KaukosaadinApp() {
 }
 
 @Composable
-private fun EmptyRemoteScreen(contentPadding: PaddingValues, onAddTv: () -> Unit) {
+private fun EmptyRemoteScreen(contentPadding: PaddingValues, onAdd: (Target) -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -230,31 +299,40 @@ private fun EmptyRemoteScreen(contentPadding: PaddingValues, onAddTv: () -> Unit
         EngravedLabel("KAUKOSÄÄDIN")
         Text("No TVs added", style = MaterialTheme.typography.headlineSmall)
         Text("Add your TV to start using the remote.", style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = onAddTv) { Text("Add TV") }
-        Text("Supports LG webOS TVs on your Wi-Fi", style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { onAdd(Target.Lg) }) { Text("Add LG TV") }
+        Button(onClick = { onAdd(Target.AppleTv) }) { Text("Add Apple TV") }
+        Text("Supports LG webOS TVs and Apple TV on your Wi-Fi", style = MaterialTheme.typography.bodySmall)
     }
 }
 
-/** Only the actual saved TV appears; controls require verified registration. */
+/**
+ * Only actual saved devices appear; controls require verified registration (LG) or
+ * a saved pairing (Apple TV). [onConnect] is null for targets that verify per press.
+ */
 @Composable
 private fun RemoteScreen(
     contentPadding: PaddingValues,
+    target: Target,
     tvName: String,
-    lgReady: Boolean,
-    lgBusy: Boolean,
-    lgWakeEnabled: Boolean,
-    lgStatus: String,
-    onLgConnect: () -> Unit,
-    onLgSettings: () -> Unit,
-    onLgAction: (LgProtocol.Action) -> Unit,
+    ready: Boolean,
+    busy: Boolean,
+    wakeEnabled: Boolean,
+    status: String,
+    onTarget: (Target) -> Unit,
+    onConnect: (() -> Unit)?,
+    onSettings: () -> Unit,
+    onWake: () -> Unit,
+    onKey: (RemoteKey, PressAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var txCount by remember { mutableIntStateOf(0) }
-    val navigationEnabled = lgReady && !lgBusy
+    val navigationEnabled = ready && !busy
+    // Apple TV Back (Menu) and Home also take double tap and 1 s hold, like the Siri Remote.
+    fun gestures(key: RemoteKey) = target == Target.AppleTv && (key == RemoteKey.Back || key == RemoteKey.Home)
 
-    fun send(action: LgProtocol.Action) {
+    fun send(key: RemoteKey, action: PressAction = PressAction.Tap) {
         txCount++
-        onLgAction(action)
+        onKey(key, action)
     }
 
     val txFlash = remember { Animatable(0f) }
@@ -316,29 +394,47 @@ private fun RemoteScreen(
                 verticalArrangement = if (framed) Arrangement.spacedBy(18.dp) else spacedEvenly(atLeast = 18.dp),
             ) {
             PowerDeck(
-                lgReady = lgReady,
-                lgWakeEnabled = lgWakeEnabled && !lgBusy,
+                ready = ready,
+                wakeEnabled = wakeEnabled && !busy,
                 txFlash = { txFlash.value },
-                onWake = { send(LgProtocol.Action.Wake) },
+                onWake = {
+                    txCount++
+                    onWake()
+                },
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    Target.entries.forEachIndexed { index, entry ->
+                        SegmentedButton(
+                            selected = entry == target,
+                            onClick = { onTarget(entry) },
+                            enabled = !busy,
+                            shape = SegmentedButtonDefaults.itemShape(index, Target.entries.size),
+                        ) { Text(entry.label) }
+                    }
+                }
                 VfdDisplay(
+                    target = target,
                     tvName = tvName,
-                    ready = lgReady,
-                    status = lgStatus.uppercase(Locale.US),
+                    ready = ready,
+                    status = status.uppercase(Locale.US),
                     txFlash = { txFlash.value },
                 )
                 Text(
-                    lgStatus,
+                    status,
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                 )
                 Row {
-                    TextButton(onClick = onLgConnect, enabled = !lgBusy) {
-                        Text(if (lgReady) "Reconnect TV" else "Connect TV")
+                    if (onConnect != null) {
+                        TextButton(onClick = onConnect, enabled = !busy) {
+                            Text(if (ready) "Reconnect TV" else "Connect TV")
+                        }
+                        TextButton(onClick = onSettings, enabled = !busy) { Text("TV settings") }
+                    } else {
+                        TextButton(onClick = onSettings, enabled = !busy) { Text("Apple TV settings") }
                     }
-                    TextButton(onClick = onLgSettings, enabled = !lgBusy) { Text("TV settings") }
                 }
             }
 
@@ -350,23 +446,48 @@ private fun RemoteScreen(
                 Dpad(
                     diameter = dialSize,
                     enabled = navigationEnabled,
-                    onPress = ::send,
+                    onPress = { send(it) },
                 )
-                Key(
-                    onClick = { send(LgProtocol.Action.Back) },
-                    shape = RoundedCornerShape(50),
-                    face = colors.secondaryContainer,
-                    enabled = navigationEnabled,
-                    elevation = 3.dp,
-                    modifier = Modifier.size(width = dialSize - 24.dp, height = 44.dp),
-                ) {
-                    Text(
-                        text = "BACK",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 2.sp,
-                        color = if (navigationEnabled) colors.onSecondaryContainer else colors.onSurfaceVariant,
-                    )
+                // Siri Remote order: Back and Home side by side, Play/Pause below.
+                val pillRows = if (target == Target.AppleTv) {
+                    listOf(listOf(RemoteKey.Back, RemoteKey.Home), listOf(RemoteKey.PlayPause))
+                } else {
+                    listOf(listOf(RemoteKey.Back))
+                }
+                val pillWidth = (dialSize - 24.dp - 12.dp * (pillRows[0].size - 1)) / pillRows[0].size
+                val legend = if (navigationEnabled) colors.onSecondaryContainer else colors.onSurfaceVariant
+                pillRows.forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        row.forEach { key ->
+                            Key(
+                                onClick = { send(key) },
+                                onDoubleClick = if (gestures(key)) ({ send(key, PressAction.DoubleTap) }) else null,
+                                onLongClick = if (gestures(key)) ({ send(key, PressAction.Hold) }) else null,
+                                shape = RoundedCornerShape(50),
+                                face = colors.secondaryContainer,
+                                enabled = navigationEnabled,
+                                elevation = 3.dp,
+                                modifier = Modifier
+                                    .size(width = pillWidth, height = 44.dp)
+                                    .then(if (key == RemoteKey.PlayPause) Modifier.semantics { contentDescription = "Play/Pause" } else Modifier),
+                            ) {
+                                if (key == RemoteKey.PlayPause) {
+                                    PlayPauseGlyph(legend, Modifier.size(width = 30.dp, height = 14.dp))
+                                } else {
+                                    Text(
+                                        text = key.name.uppercase(Locale.US),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = 2.sp,
+                                        color = legend,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                if (target == Target.AppleTv) {
+                    Text("Back/Home: double tap = double press · hold = 1 s hold", style = MaterialTheme.typography.bodySmall)
                 }
             }
 
@@ -375,7 +496,10 @@ private fun RemoteScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Wake only · TV power is not monitored", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (target == Target.Lg) "Wake only · TV power is not monitored" else "No Apple TV wake · power is not monitored",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 SpeakerGrille()
                     EngravedLabel("MODEL KS-01 · UNIVERSAL")
                 }
@@ -387,13 +511,13 @@ private fun RemoteScreen(
 /** Wake button for the saved TV; the LED indicates registration, not power. */
 @Composable
 private fun PowerDeck(
-    lgReady: Boolean,
-    lgWakeEnabled: Boolean,
+    ready: Boolean,
+    wakeEnabled: Boolean,
     txFlash: () -> Float,
     onWake: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        PowerKey(lgReady, lgWakeEnabled, onWake)
+        PowerKey(ready, wakeEnabled, onWake)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -466,6 +590,25 @@ private fun PowerGlyph(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/** Play triangle followed by two pause bars, as printed on media remotes. */
+@Composable
+private fun PlayPauseGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val h = size.height
+        val play = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(h * 0.9f, h / 2)
+            lineTo(0f, h)
+            close()
+        }
+        drawPath(play, color)
+        val bar = h * 0.28f
+        val left = size.width - bar * 3
+        drawRect(color, Offset(left, 0f), Size(bar, h))
+        drawRect(color, Offset(left + bar * 2, 0f), Size(bar, h))
+    }
+}
+
 /** Registration LED: glowing green when verified, otherwise a dark unlit bead. */
 @Composable
 private fun Led(isOn: Boolean) {
@@ -517,7 +660,7 @@ private fun TxLamp(flash: () -> Float) {
  * a blinking cursor.
  */
 @Composable
-private fun VfdDisplay(tvName: String, ready: Boolean, status: String, txFlash: () -> Float) {
+private fun VfdDisplay(target: Target, tvName: String, ready: Boolean, status: String, txFlash: () -> Float) {
     val bezel = RoundedCornerShape(14.dp)
     Box(
         Modifier
@@ -537,7 +680,7 @@ private fun VfdDisplay(tvName: String, ready: Boolean, status: String, txFlash: 
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Annunciator("TV", lit = true)
+                Annunciator(target.annunciator, lit = true)
                 Spacer(Modifier.weight(1f))
                 Annunciator("READY", lit = ready)
                 Annunciator("SETUP", lit = !ready)
@@ -553,7 +696,7 @@ private fun VfdDisplay(tvName: String, ready: Boolean, status: String, txFlash: 
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "WEBOS",
+                    text = target.platform,
                     style = vfdStyle(MaterialTheme.typography.labelMedium, LcdDim),
                     letterSpacing = 1.sp,
                     modifier = Modifier.padding(bottom = 4.dp),
@@ -629,14 +772,14 @@ private fun Modifier.vfdGlass() = drawWithContent {
 /**
  * One-piece navigation wheel: a knurled bezel, four arrows printed on the face,
  * and a raised OK key seated in a recessed well. The quarter under a held
- * arrow darkens as if the wheel tilts. Until LG registration is verified,
- * the whole wheel greys out and refuses input.
+ * arrow darkens as if the wheel tilts. Until the target is ready, the whole
+ * wheel greys out and refuses input.
  */
 @Composable
 private fun Dpad(
     diameter: Dp,
     enabled: Boolean,
-    onPress: (LgProtocol.Action) -> Unit,
+    onPress: (RemoteKey) -> Unit,
 ) {
     val okKeySize = diameter * 0.41f
     val arrowHitSize = diameter / 3
@@ -702,10 +845,10 @@ private fun Dpad(
                 modifier = Modifier
                     .align(direction.alignment)
                     .size(arrowHitSize),
-            ) { onPress(direction.action) }
+            ) { onPress(direction.key) }
         }
         Key(
-            onClick = { onPress(LgProtocol.Action.Select) },
+            onClick = { onPress(RemoteKey.Select) },
             shape = CircleShape,
             face = colors.primary,
             enabled = enabled,
@@ -768,7 +911,8 @@ private fun DialArrow(
 
 /**
  * Raised key cap: lit-from-above gradient face, bevelled rim, drop shadow.
- * While held the gradient flips so the cap reads as pushed in.
+ * While held the gradient flips so the cap reads as pushed in. A double-tap
+ * handler delays single taps until the double-tap window passes.
  */
 @Composable
 private fun Key(
@@ -776,6 +920,8 @@ private fun Key(
     shape: Shape,
     face: Color,
     modifier: Modifier = Modifier,
+    onDoubleClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     enabled: Boolean = true,
     elevation: Dp = 4.dp,
     haptic: Int = HapticFeedbackConstants.KEYBOARD_TAP,
@@ -813,11 +959,13 @@ private fun Key(
                 ),
                 shape = shape,
             )
-            .clickable(
+            .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
                 enabled = enabled,
                 role = Role.Button,
+                onDoubleClick = onDoubleClick?.let { { view.performHapticFeedback(haptic); it() } },
+                onLongClick = onLongClick?.let { { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); it() } },
             ) {
                 view.performHapticFeedback(haptic)
                 onClick()

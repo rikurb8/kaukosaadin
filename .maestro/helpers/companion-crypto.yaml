@@ -1,0 +1,10 @@
+# Launch CompanionCryptoActivity with ADB first (see docs/apple-tv-companion.md).
+# Local synthetic crypto only: preserves app data and never contacts a TV.
+appId: fi.goodconsulting.kaukosaadin
+---
+- assertVisible: "Companion crypto gate"
+- tapOn: "Run crypto checks"
+- extendedWaitUntil:
+    visible: "Companion crypto: 6/6 PASS"
+    timeout: 30000
+- assertVisible: "Companion crypto: 6/6 PASS"

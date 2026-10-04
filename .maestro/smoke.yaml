@@ -15,7 +15,7 @@ tags:
     commands:
       - assertNotVisible: "OK"
       - assertNotVisible: "Wake TV"
-      - tapOn: "Add TV"
+      - tapOn: "Add LG TV"
 - runFlow:
     when:
       visible: "TV settings"
@@ -42,7 +42,7 @@ tags:
     when:
       visible: "No TVs added"
     commands:
-      - assertVisible: "Add TV"
+      - assertVisible: "Add LG TV"
       - assertNotVisible: "OK"
 - runFlow:
     when:
