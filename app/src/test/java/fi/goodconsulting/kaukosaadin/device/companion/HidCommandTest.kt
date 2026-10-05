@@ -15,6 +15,8 @@ class HidCommandTest {
                 "Menu" to 5,
                 "Select" to 6,
                 "Home" to 7,
+                "VolumeUp" to 8,
+                "VolumeDown" to 9,
                 "Sleep" to 12,
                 "PlayPause" to 14,
             )

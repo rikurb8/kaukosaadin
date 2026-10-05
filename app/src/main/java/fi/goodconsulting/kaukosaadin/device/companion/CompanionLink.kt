@@ -33,6 +33,8 @@ enum class HidCommand(
     Menu(5),
     Select(6),
     Home(7),
+    VolumeUp(8),
+    VolumeDown(9),
     Sleep(12),
     PlayPause(14),
 }

@@ -69,6 +69,11 @@ class CompanionInteropTest {
                 assertEquals("BUTTON ${command.name.lowercase()}", next())
                 Thread.sleep(100)
             }
+            // Volume: the peer reports pyatv's own names (volume_up/volume_down), not our enum names.
+            link.press(HidCommand.VolumeUp)
+            assertEquals("BUTTON volume_up", next())
+            link.press(HidCommand.VolumeDown)
+            assertEquals("BUTTON volume_down", next())
             // Power-off is the release event only (pyatv `CompanionPower.turn_off`); the peer accepts it.
             link.sleep()
             link.stopSession()

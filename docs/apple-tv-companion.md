@@ -8,11 +8,12 @@ checks, Android packaging and lint pass, and the required S25 crypto gate **pass
 6/6 on hardware** (re-run 2026-10-04 after the PIN fix below). Android NSD discovery
 resolves the Apple TV's advertised host/port. Framing, OPACK, TLV8, PIN pair-setup,
 pair-verify, Keystore credential storage, session startup, HID presses (Menu/Back,
-Home/TV, arrows, Select) and the launchable-app list plus app launch are implemented and pass
+Home/TV, arrows, Select, Volume up/down) and the launchable-app list plus app launch are implemented and pass
 against pinned pyatv's fake Apple TV, and pairing + Home/Menu tap, double tap and hold were
 operator-confirmed on the real
-Apple TV, from the host JVM and from the S25 app (2026-10-04, below); arrows, Select and
-Play/Pause were operator-confirmed from the integrated main remote the same day (2026-10-04). The
+Apple TV, from the host JVM and from the S25 app (2026-10-04, below); arrows, Select,
+Play/Pause and Volume -/+ were operator-confirmed from the integrated main remote (2026-10-04 and
+2026-10-06). The
 launchable-app list was fetched from the real Apple TV on 2026-10-05 (36 apps, tvOS 26.6; a data
 request, so no operator action was needed), and the operator then launched **Yle Areena** from that
 list and re-confirmed arrows/OK on the same build. Phone-typed
@@ -214,7 +215,7 @@ leaving the remote or backgrounding closes the connection after any in-flight op
 Pairing/forgetting and command failures also discard the session. The next press can
 connect again, but failed presses are never replayed or queued. There is no session setting.
 Persistent-session lifecycle behavior still needs a real-device check. HID codes: Up 1, Down 2, Left 3, Right 4, **Menu (Back) 5**,
-Select 6, **Home (TV) 7**, Sleep 12, PlayPause 14 (pinned pyatv `play_pause` sends this HID press). The power key
+Select 6, **Home (TV) 7**, VolumeUp 8, VolumeDown 9, Sleep 12, PlayPause 14 (pinned pyatv `play_pause` sends this HID press). The power key
 sends Sleep as the release event alone, exactly like pyatv `CompanionPower.turn_off` — no down/up pair, unlike
 the navigation keys. Press actions follow pyatv `_press_button`: tap = down/up,
 double tap = two down/up pairs on the same connection, hold = down, 1 s, up (release
@@ -223,13 +224,42 @@ these; operator-confirmed on the real Apple TV from the S25 (see below).
 
 The main app's **Add device** screen (`ui/AddDeviceScreen.kt`) scans and pairs with the TV's PIN;
 **Device settings** removes it. The main remote, driving an Apple TV, exposes a power key (Sleep; confirmed
-on the real Apple TV 2026-10-05), BACK (Menu), HOME (TV), Play/Pause,
+on the real Apple TV 2026-10-05), BACK (Menu), HOME (TV), Play/Pause, Volume -/+,
 arrows and OK (Select), with double tap/hold on BACK and HOME. Play/Pause has no
 fake-peer test; it is operator-confirmed on the real Apple TV (below). It replaced the debug-only
-`CompanionRemoteActivity`. Each saved Apple TV now keeps its own `companion-<id>` prefs; all of
+`CompanionRemoteActivity`.
+
+Each saved Apple TV now keeps its own `companion-<id>` prefs; all of
 them share the `companion-pairing` Keystore key and one `companion-identity` (rpId/deviceId), so
 removing one never invalidates another. The pre-saved-devices `companion` prefs are deleted, not
 migrated: pair again after upgrading.
+
+**Volume -/+** are two more pill keys in the Apple TV key block, one HID step per tap via the
+same down/up `_hidC` pair as every other key (`CompanionRemoteControl.volume_up`/
+`volume_down` in the pinned reference); no `_mcc` `SetVolume`, no level readout and no
+`_iMC` subscription. They are gated by the same `ready && !busy` rule as the arrows, and LG
+has no volume keys. The Apple TV only forwards this to the TV/AVR when **Settings › Remotes and
+Devices › Volume Control** is set to control the TV; with that off the request is acknowledged and
+nothing audible happens, and the app cannot read that setting, so there is no detection or
+fallback. Volume shares the Play/Pause row, so the casing keeps the footprint it had before the
+keys existed and `tools/check_remote_layout.py` needs no change (LG's 44 dp spacer still matches the
+Apple TV's second row).
+
+Checks: pinned pyatv's own fake `HID_BUTTON_MAP` already covers both codes, so
+`tools/companion_fake_atv.py` is unchanged; the interop press loop asserts `BUTTON volume_up` /
+`BUTTON volume_down`, and `HidCommandTest` pins `VolumeUp` 8 / `VolumeDown` 9 against the
+reference.
+
+**Real Apple TV, 2026-10-06:** the S25 (`R3GL204147Z`, debug APK
+`494d360b87c82076e28e31c565675abec494d6cbd3ba943dc623e9f3b198e3d5`, installed with
+`adb install -r` over the existing data) drove `Entertainment Room` (Apple TV 4K `AppleTV6,2`,
+tvOS 26.6) over the integrated main remote; the operator confirmed the volume actually moves on
+Volume -/+. Steps per press and the TV's Volume Control setting were not recorded. The main-remote
+smoke flow passed on that build, and `tools/check_remote_layout.py` could not be re-run (it still
+expects the pre-dropdown device segments and needs an LG TV saved); the layout evidence is instead
+the uiautomator bounds, identical to the pre-change build — `OK` [512,1513][570,1574], `BACK`
+[351,1899][460,1950], `HOME` [616,1899][734,1950], `MODEL KS-01 · UNIVERSAL` [309,2246][771,2287],
+with `Play/Pause` and `VOL -`/`VOL +` in the second row.
 
 Interop check against pyatv's fake Companion Apple TV (`tools/companion_fake_atv.py`,
 which also verifies **our** M5/PV-M3 signatures like a real TV), using the venv from

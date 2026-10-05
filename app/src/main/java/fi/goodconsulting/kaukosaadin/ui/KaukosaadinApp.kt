@@ -51,7 +51,7 @@ import kotlinx.coroutines.withContext
 /** Where the app is; every screen but the remote returns to it. */
 private enum class Screen { Remote, AddDevice, DeviceSettings, Apps, GeneralSettings }
 
-/** Remote keys and the command each device kind sends; LG has no Home or Play/Pause key. */
+/** Remote keys and the command each device kind sends; LG has no Home, Play/Pause or volume key. */
 internal enum class RemoteKey(
     val lg: LgProtocol.Action?,
     val hid: HidCommand,
@@ -64,6 +64,8 @@ internal enum class RemoteKey(
     Back(LgProtocol.Action.Back, HidCommand.Menu),
     Home(null, HidCommand.Home),
     PlayPause(null, HidCommand.PlayPause),
+    VolumeDown(null, HidCommand.VolumeDown),
+    VolumeUp(null, HidCommand.VolumeUp),
 }
 
 /** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. Angles

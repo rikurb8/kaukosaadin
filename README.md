@@ -8,7 +8,7 @@ Wi-Fi, with no cloud, account or bridge in between.
 | --- | --- | --- |
 | **Find** | Wi-Fi scan (Companion mDNS) | Wi-Fi scan (SSDP) or address by hand |
 | **Pair** | PIN shown on the TV | Pinned TLS certificate, then PIN |
-| **Navigate** | Arrows, OK, BACK (Menu), HOME (TV), Play/Pause | Arrows, OK, BACK |
+| **Navigate** | Arrows, OK, BACK (Menu), HOME (TV), Play/Pause, Volume -/+ | Arrows, OK, BACK |
 | **Extras** | App launcher; type on the phone, text appears on the TV | Wake-on-LAN |
 | **Tested on** | A real Apple TV, from a Galaxy S25 | LG G3 |
 
@@ -43,9 +43,13 @@ pair them again from **Find devices**.
 
 ### Apple TV
 
-The remote has arrows, **OK**, **BACK** (Menu), **HOME** (TV) and **Play/Pause**;
-BACK/HOME also take double tap and a 1 s hold.
+The remote has arrows, **OK**, **BACK** (Menu), **HOME** (TV), **Play/Pause** and
+**Volume -/+** keys; BACK/HOME also take double tap and a 1 s hold.
 
+- **Volume -/+** steps the volume once per tap, like the Siri Remote's side buttons. The Apple
+  TV only forwards it to the TV/AVR when **Settings › Remotes and Devices › Volume Control** is
+  set to control the TV; with that off, the press is acknowledged and nothing audible happens.
+  Operator-confirmed on the real Apple TV (2026-10-06).
 - **Apps** lists what the Apple TV reports as launchable and starts the one you tap (36 apps on
   the real Apple TV; list and launch both operator-confirmed, and the startup request they need
   was found on the real TV).
@@ -56,7 +60,8 @@ BACK/HOME also take double tap and a 1 s hold.
 Opening the remote connects once and reuses the verified session while the screen is visible,
 including while the apps list is open; leaving, switching device or backgrounding it closes the
 connection, and failed presses are never replayed or queued. Pairing and Home/Menu tap, double
-tap and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25. See
+tap and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25, and volume
+was confirmed the same way on 2026-10-06. See
 [Apple TV Companion](docs/apple-tv-companion.md); a debug-only crypto gate and discovery screen
 remain there.
 

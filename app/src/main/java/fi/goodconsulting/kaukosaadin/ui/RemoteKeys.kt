@@ -82,16 +82,22 @@ internal fun RemoteKeys(
             enabled = navigationEnabled,
             onPress = { onPress(it, PressAction.Tap) },
         )
-        // Siri Remote order: Back and Home side by side, Play/Pause below.
+        // Siri Remote order: Back and Home side by side, then Play/Pause and volume below.
+        // Volume shares the Play/Pause row so the casing keeps the footprint it had before
+        // the keys existed; a third row pushed the grille and engraving off a phone screen.
         val pillRows =
             if (kind == DeviceKind.AppleTv) {
-                listOf(listOf(RemoteKey.Back, RemoteKey.Home), listOf(RemoteKey.PlayPause))
+                listOf(
+                    listOf(RemoteKey.Back, RemoteKey.Home),
+                    listOf(RemoteKey.PlayPause, RemoteKey.VolumeDown, RemoteKey.VolumeUp),
+                )
             } else {
                 listOf(listOf(RemoteKey.Back))
             }
-        val pillWidth = (dialSize - 24.dp - 12.dp * (pillRows[0].size - 1)) / pillRows[0].size
         val legend = if (navigationEnabled) colors.onSecondaryContainer else colors.onSurfaceVariant
         pillRows.forEach { row ->
+            // Each row sizes its own pills: the Play/Pause row has three, the others two or one.
+            val pillWidth = (dialSize - 24.dp - 12.dp * (row.size - 1)) / row.size
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { key ->
                     PillKey(key, pillWidth, kind, colors.secondaryContainer, legend, navigationEnabled, onPress)
@@ -138,7 +144,7 @@ private fun PillKey(
             PlayPauseGlyph(legend, Modifier.size(width = 30.dp, height = 14.dp))
         } else {
             Text(
-                text = key.name.uppercase(Locale.US),
+                text = key.label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 2.sp,
@@ -147,6 +153,15 @@ private fun PillKey(
         }
     }
 }
+
+/** Engraved label on a pill: the enum name, except volume's VOL -/+ signs. */
+private val RemoteKey.label: String
+    get() =
+        when (this) {
+            RemoteKey.VolumeDown -> "VOL -"
+            RemoteKey.VolumeUp -> "VOL +"
+            else -> name.uppercase(Locale.US)
+        }
 
 /**
  * One-piece navigation wheel: a knurled bezel, four arrows printed on the face,
