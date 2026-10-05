@@ -43,13 +43,24 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.channels.Channel as PinChannel
 
-// ponytail: one class per paired TV — settings, pairing, wake and status share one stored TV;
-// split persistence out when a second TV or transport lands.
+/** Read-only SSDP scan for awake LG TVs; replies are neither identity nor pairing evidence. */
+suspend fun scanLg(context: Context): List<TVDiscovery.DiscoveredTV> =
+    withContext(Dispatchers.IO) {
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val multicast = wifi.createMulticastLock("lg-discovery").apply { setReferenceCounted(false) }
+        try {
+            multicast.acquire()
+            TVDiscovery().scanNetwork().filter { runCatching { LgProtocol.ipv4(it.ip) }.isSuccess }
+        } finally {
+            if (multicast.isHeld) multicast.release()
+        }
+    }
 
-/** One operation at a time; never queues or replays navigation across reconnection. */
+/** One saved LG TV, keyed by its [id]; one operation at a time, never queues or replays navigation. */
 @Suppress("TooManyFunctions")
 class LgClient(
     context: Context,
+    id: String,
 ) {
     data class Result(
         val ok: Boolean,
@@ -58,10 +69,8 @@ class LgClient(
 
     private val appContext = context.applicationContext
 
-    // ponytail: one saved TV; add a device list when multiple remotes are needed.
-    private val prefs = appContext.getSharedPreferences("lg", Context.MODE_PRIVATE)
-    private val mutableDevices = MutableStateFlow<List<TVDiscovery.DiscoveredTV>>(emptyList())
-    val devices = mutableDevices.asStateFlow()
+    private val prefsName = "lg-$id"
+    private val prefs = appContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
     private val lock = Mutex()
     private val mutableStatus =
         MutableStateFlow(
@@ -70,7 +79,7 @@ class LgClient(
                 if (prefs.contains("fingerprint")) {
                     "TV not connected. Tap Connect TV with the TV awake."
                 } else {
-                    "Add a TV, inspect its certificate and save approved setup."
+                    "Trust the TV's certificate, then pair with its PIN."
                 },
             ),
         )
@@ -84,7 +93,6 @@ class LgClient(
 
     @Volatile private var pendingPin: PinChannel<String>? = null
     val host get() = prefs.getString("host", "")!!
-    val name get() = LgProtocol.tvName(prefs.getString("name", "")!!)
     val mac get() = prefs.getString("mac", "")!!
     val broadcast get() = prefs.getString("broadcast", "")!!
     val fingerprint get() = prefs.getString("fingerprint", "")!!
@@ -100,7 +108,7 @@ class LgClient(
                     try {
                         block()
                     } catch (_: TimeoutCancellationException) {
-                        Result(false, "PIN entry timed out. Retry Connect / pair LG to request a new code.")
+                        Result(false, "PIN entry timed out. Re-pair to request a new code.")
                     } catch (e: CancellationException) {
                         mutableStatus.value = Result(false, "LG operation cancelled. Retry Connect when ready.")
                         throw e
@@ -110,10 +118,10 @@ class LgClient(
                             false,
                             when (e) {
                                 is CertificateException, is SSLException ->
-                                    "Certificate rejected. Inspect and explicitly approve the TV certificate; " +
+                                    "Certificate changed or rejected. Re-pair to trust the TV certificate again; " +
                                         "never downgrade to ws."
                                 is IllegalArgumentException -> e.message ?: "Invalid setup."
-                                is IllegalStateException -> e.message ?: "TV rejected request; forget and re-pair."
+                                is IllegalStateException -> e.message ?: "TV rejected request; re-pair it in Device settings."
                                 else -> "LG unreachable or timed out. Wake TV, check Wi-Fi/LAN permission and address, then reconnect."
                             },
                         )
@@ -125,36 +133,9 @@ class LgClient(
             }
         }
 
-    suspend fun discover() =
-        operation {
-            mutableDevices.value = emptyList()
-            mutableStatus.value = Result(false, "Searching the LAN for awake LG TVs…")
-            val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val multicast = wifi.createMulticastLock("lg-discovery").apply { setReferenceCounted(false) }
-            try {
-                multicast.acquire()
-                mutableDevices.value =
-                    TVDiscovery().scanNetwork().filter {
-                        runCatching { LgProtocol.ipv4(it.ip) }.isSuccess
-                    }
-            } finally {
-                if (multicast.isHeld) multicast.release()
-            }
-            val count = mutableDevices.value.size
-            Result(
-                count > 0,
-                if (count > 0) {
-                    "Found $count LG TV(s). Select one; discovery does not establish trust."
-                } else {
-                    "No LG TVs replied. Turn TV on, check same Wi-Fi/subnet and router isolation, retry or use saved/manual setup."
-                },
-            )
-        }
-
     suspend fun save(
         address: String,
         pin: String,
-        displayName: String,
     ) = operation {
         val normalizedPin = LgProtocol.pairingFingerprint(address, pin)
         val addressChanged = host != address
@@ -164,7 +145,6 @@ class LgClient(
                 .edit()
                 .putString("host", address)
                 .putString("fingerprint", normalizedPin)
-                .putString("name", LgProtocol.tvName(displayName))
                 .apply {
                     if (changed) remove("key")
                     if (addressChanged) {
@@ -174,23 +154,16 @@ class LgClient(
                 }.commit(),
         ) { "Could not save setup. Try again." }
         if (changed) mutableReady.value = false
-        Result(true, "Setup saved. Connect with the TV awake to pair. Wake settings are optional.")
+        Result(true, "Certificate trusted. Connect with the TV awake to pair.")
     }
 
-    suspend fun saveName(
-        address: String,
-        displayName: String,
-    ) = operation {
-        check(address == host && host.isNotEmpty()) { "Save this TV's setup before renaming it." }
-        check(prefs.edit().putString("name", LgProtocol.tvName(displayName)).commit()) { "Could not save TV name. Try again." }
-        Result(true, "TV name saved. Pairing is unchanged.")
-    }
-
-    suspend fun remove() =
+    /** Drops this TV's address, pairing and wake settings; the saved-device entry is the caller's. */
+    suspend fun delete() =
         operation {
             check(prefs.edit().clear().commit()) { "Could not remove TV. Try again." }
+            appContext.deleteSharedPreferences(prefsName)
             mutableReady.value = false
-            Result(true, "TV removed. Add a TV to start again.")
+            Result(true, "TV removed.")
         }
 
     suspend fun saveWake(
@@ -248,8 +221,17 @@ class LgClient(
                     .commit(),
             ) { "Could not forget pairing." }
             mutableReady.value = false
-            Result(true, "Pairing and certificate forgotten. Inspect, approve, then connect again.")
+            Result(true, "Pairing and certificate forgotten.")
         }
+
+    /** Saves the certificate the user trusted, then registers, asking for the TV's PIN when it wants one. */
+    suspend fun pair(
+        address: String,
+        fingerprint: String,
+    ): Result {
+        val saved = save(address, fingerprint)
+        return if (saved.ok) connect() else saved
+    }
 
     suspend fun connect() =
         operation {
@@ -269,7 +251,7 @@ class LgClient(
             if (submitted) {
                 "PIN submitted; waiting for TV registration."
             } else {
-                "No active PIN request. Retry Connect / pair LG."
+                "No active PIN request. Re-pair the TV."
             },
         )
     }
@@ -289,7 +271,7 @@ class LgClient(
                 try {
                     input.receive()
                 } catch (_: kotlinx.coroutines.channels.ClosedReceiveChannelException) {
-                    error("PIN pairing cancelled. Retry Connect / pair LG when ready.")
+                    error("PIN pairing cancelled.")
                 }
             }
         } finally {
@@ -303,7 +285,7 @@ class LgClient(
         operation {
             mutableReady.value = false
             if (action == LgProtocol.Action.Wake) {
-                check(mac.isNotEmpty() && broadcast.isNotEmpty()) { "Save the TV's MAC and subnet broadcast in Wake settings first." }
+                check(mac.isNotEmpty() && broadcast.isNotEmpty()) { "Save the TV's MAC and subnet broadcast in Device settings first." }
                 val packet = LgProtocol.magicPacket(mac)
                 val target = InetAddress.getByName(LgProtocol.ipv4(broadcast))
                 DatagramSocket().use { socket ->
@@ -319,9 +301,9 @@ class LgClient(
     // ponytail: reconnect per press adds TLS latency; reuse a live session only if measured too slow.
     private suspend fun session(action: LgProtocol.Action?): Result {
         val address = LgProtocol.ipv4(host)
-        check(fingerprint.isNotEmpty()) { "Inspect and approve the TV certificate first." }
+        check(fingerprint.isNotEmpty()) { "Trust the TV certificate first: Device settings › Re-pair." }
         val savedKey = readKey()
-        check(action == null || savedKey != null) { "Connect / pair with the TV awake before sending navigation." }
+        check(action == null || savedKey != null) { "Pair with the TV awake before sending navigation." }
         val http = pinnedClient(address)
         try {
             Channel(http, "wss://$address:$CONTROL_PORT/").use { control ->
@@ -445,7 +427,7 @@ class LgClient(
                 }
             String(cipher.doFinal(data.copyOfRange(12, data.size)), Charsets.UTF_8)
         } catch (_: Exception) {
-            error("Saved pairing cannot be decrypted. Forget pairing, then reconnect using the TV PIN.")
+            error("Saved pairing cannot be decrypted. Re-pair the TV in Device settings.")
         }
     }
 

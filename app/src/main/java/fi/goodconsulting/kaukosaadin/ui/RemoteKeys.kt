@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.util.Locale
 import kotlin.math.PI
@@ -58,15 +59,15 @@ import kotlin.math.sin
 
 /** Apple TV Back (Menu) and Home also take double tap and 1 s hold, like the Siri Remote. */
 internal fun gestures(
-    target: Target,
+    kind: DeviceKind,
     key: RemoteKey,
-) = target == Target.AppleTv && (key == RemoteKey.Back || key == RemoteKey.Home)
+) = kind == DeviceKind.AppleTv && (key == RemoteKey.Back || key == RemoteKey.Home)
 
 /** Wheel plus Back/Home/Play-Pause keys; shared by every layout. */
 @Composable
 internal fun RemoteKeys(
     dialSize: Dp,
-    target: Target,
+    kind: DeviceKind,
     navigationEnabled: Boolean,
     onPress: (RemoteKey, PressAction) -> Unit,
 ) {
@@ -83,7 +84,7 @@ internal fun RemoteKeys(
         )
         // Siri Remote order: Back and Home side by side, Play/Pause below.
         val pillRows =
-            if (target == Target.AppleTv) {
+            if (kind == DeviceKind.AppleTv) {
                 listOf(listOf(RemoteKey.Back, RemoteKey.Home), listOf(RemoteKey.PlayPause))
             } else {
                 listOf(listOf(RemoteKey.Back))
@@ -93,13 +94,13 @@ internal fun RemoteKeys(
         pillRows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { key ->
-                    PillKey(key, pillWidth, target, colors.secondaryContainer, legend, navigationEnabled, onPress)
+                    PillKey(key, pillWidth, kind, colors.secondaryContainer, legend, navigationEnabled, onPress)
                 }
             }
         }
         // Keep the Play/Pause row's footprint: fitToHeight must not resize the
-        // entire remote when switching to a target with fewer keys.
-        if (target == Target.Lg) Spacer(Modifier.height(44.dp))
+        // entire remote when switching to a device kind with fewer keys.
+        if (kind == DeviceKind.Lg) Spacer(Modifier.height(44.dp))
     }
 }
 
@@ -108,7 +109,7 @@ internal fun RemoteKeys(
 private fun PillKey(
     key: RemoteKey,
     width: Dp,
-    target: Target,
+    kind: DeviceKind,
     face: Color,
     legend: Color,
     enabled: Boolean,
@@ -116,8 +117,8 @@ private fun PillKey(
 ) {
     Key(
         onClick = { onPress(key, PressAction.Tap) },
-        onDoubleClick = if (gestures(target, key)) ({ onPress(key, PressAction.DoubleTap) }) else null,
-        onLongClick = if (gestures(target, key)) ({ onPress(key, PressAction.Hold) }) else null,
+        onDoubleClick = if (gestures(kind, key)) ({ onPress(key, PressAction.DoubleTap) }) else null,
+        onLongClick = if (gestures(kind, key)) ({ onPress(key, PressAction.Hold) }) else null,
         shape = RoundedCornerShape(50),
         face = face,
         enabled = enabled,

@@ -1,43 +1,48 @@
 # Kaukosäädin
 
-Android remote for **LG webOS TVs** and **Apple TV** over your home network.
+Android TV remote for your home network: **Apple TV** and **LG webOS TVs** (the first TV
+brand supported).
 
-Fresh installs show **No TVs added**, not a pre-filled remote. Tap **Add LG TV** to discover
-and select a TV (or enter its IPv4 address), approve its certificate and pair with its
-on-screen PIN. Successful pairing opens the main remote. Discovery supplies the TV's
-advertised display name when available; **TV name** is editable and saved with setup.
-**Save TV name** renames an existing TV without changing pairing. Old saved setups remain
-usable and default to “LG TV” until named. **Remove TV** requires confirmation and returns
-to the empty state; **Forget LG pairing and certificate** only resets trust/pairing.
+Fresh installs show **No devices added**. Tap **Find devices** to scan your Wi-Fi: LG TVs
+(SSDP) and Apple TVs (Companion mDNS) are found together and listed with their advertised name and
+address, or you can **Enter LG TV address** by hand. Tap a device to pair it, and it is saved:
 
-The app saves one LG TV and one Apple TV; the **LG TV / Apple TV** switch on the remote
-picks which one the keys drive (selecting one that isn't set up opens its setup). **Connect TV**
-reuses saved pairing, and **TV settings** allows changing setup and optional Wake-on-LAN
-settings. The arrows, **OK** and **BACK** send real commands; navigation is disabled before
-connecting, while busy and after a failed command. Commands are never replayed automatically.
-**Wake TV** is wake-only, enabled with saved MAC/broadcast settings. After waking, wait
-for the TV and tap Connect. READY/LEDs indicate verified registration, not TV power or a
-persistent socket.
+- **Apple TV** pairs with the PIN it shows.
+- **LG TV** shows one **Trust this TV?** dialog with an editable name and the TV's certificate
+  fingerprint; **Trust & pair** pins that certificate and the TV then asks for its PIN.
 
-**Add Apple TV** (or **Apple TV settings**) scans for Companion services, pairs with the
-PIN the Apple TV shows and can forget the pairing. Its remote has arrows, **OK**, **BACK**
-(Menu), **HOME** (TV) and **Play/Pause**; BACK/HOME also take double tap and a 1 s hold.
+Any number of devices of either kind can be saved. The picker at the top of the remote switches
+between them and has **Add device…**. The remote opens on the device you last used; until you pick
+one, an Apple TV is the default if one is saved. **Device settings** renames the device and
+**Remove device** (with confirmation) forgets it; for LG it also has **Re-pair** and the optional
+Wake-on-LAN settings. Upgrading from the single-slot build drops the old LG/Apple TV pairings:
+pair them again from **Find devices**.
+
+On an LG TV, **Connect TV** reuses saved pairing. The arrows, **OK** and **BACK** send real
+commands; navigation is disabled before connecting, while busy and after a failed command.
+Commands are never replayed automatically. **Wake TV** is wake-only, enabled with saved
+MAC/broadcast settings. After waking, wait for the TV and tap Connect. READY/LEDs indicate
+verified registration, not TV power or a persistent socket.
+
+On an Apple TV the remote has arrows, **OK**, **BACK** (Menu), **HOME** (TV) and **Play/Pause**;
+BACK/HOME also take double tap and a 1 s hold.
 **Apps** lists what the Apple TV reports as launchable and starts the one you tap (36 apps on the
 real Apple TV; list and launch both operator-confirmed, and the startup request they need was
 found on the real TV).
 Opening the Apple TV remote connects once and reuses the verified session while the screen
-is visible, including while the apps list is open; leaving or backgrounding it closes the
-connection, and failed presses are never replayed or queued. When the Apple TV's on-screen keyboard appears, the app opens a text
-field and mirrors what you type to the TV (fake-peer verified, not yet checked on a real
-Apple TV). There is no Apple TV wake. Pairing and Home/Menu tap, double tap
-and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25. See [Apple TV Companion](docs/apple-tv-companion.md); a debug-only
-crypto gate and discovery screen remain there.
+is visible, including while the apps list is open; leaving, switching device or backgrounding it
+closes the connection, and failed presses are never replayed or queued. When the Apple TV's
+on-screen keyboard appears, the app opens a text field and mirrors what you type to the TV
+(fake-peer verified, not yet checked on a real Apple TV). There is no Apple TV wake. Pairing and
+Home/Menu tap, double tap and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV
+from the S25. See [Apple TV Companion](docs/apple-tv-companion.md); a debug-only crypto gate and
+discovery screen remain there.
 
 PIN pairing and saved-pairing reconnect have been operator-verified on the LG G3.
 See [LG verification and operator handoff](docs/lg-g3.md) for physical-action checks.
 
 **General settings** is available from both the empty screen and the remote, separately
-from device setup. **Theme** picks the palette: **Classic** (the original palette, following
+from device settings. **Theme** picks the palette: **Classic** (the original palette, following
 system light/dark mode) or **Hacker man** (a green-on-black demo theme). **Layout** picks how
 the remote screen is presented: **Standard** (the full casing, wheel and VFD display) or
 **Debug** (flat panels with a live timestamped status log, for development and
@@ -50,13 +55,14 @@ app and are remembered across restarts.
 | --- | --- |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/MainActivity.kt` | Single activity; hosts Compose |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/ui/` | Compose UI (screens and components) |
-| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses, text input |
+| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | Saved-device store, LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses, text input |
 | `.maestro/` | Maestro flows and workspace configuration |
 | `.dagger/modules/ci/main.dang` | The CI check: a JDK 21 container running ktlint and detekt |
 | `.github/workflows/ci.yml` | GitHub Actions entry point: installs the pinned Dagger CLI and runs the check |
 
-UI and device-network code live in separate packages in the single `app` module. There is
-no DI framework, no multi-module setup, and no generic device abstraction.
+UI and device-network code live in separate packages in the single `app` module. A small
+saved-device store (`device/SavedDevices.kt`) lists the devices and their kind; each kind keeps
+its own client and per-device storage. There is no DI framework and no multi-module setup.
 
 ## App ID
 
@@ -225,7 +231,7 @@ fixes; no additional dependency or discovery stack. Sleeping TVs retain saved se
 manual fallback. MAC/subnet broadcast still need operator input for wake.
 No bridge, cloud execution, power-off, or generic device framework.
 
-Discovery UI check (no pairing or TV commands):
+Discovery UI check (scans for LG and Apple TV; no pairing or TV commands):
 ```bash
-maestro test --device <serial> .maestro/helpers/lg-discovery.yaml
+maestro test --device <serial> .maestro/helpers/device-discovery.yaml
 ```

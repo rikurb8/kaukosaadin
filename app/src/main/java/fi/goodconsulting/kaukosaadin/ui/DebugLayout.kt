@@ -14,9 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 
 /**
@@ -35,15 +33,16 @@ import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 @Composable
 internal fun DebugRemoteScreen(
     contentPadding: PaddingValues,
-    target: Target,
-    tvName: String,
+    devices: List<SavedDevice>,
+    current: SavedDevice,
     ready: Boolean,
     busy: Boolean,
     wakeEnabled: Boolean,
     txCount: Int,
     log: List<LogLine>,
     navigationEnabled: Boolean,
-    onTarget: (Target) -> Unit,
+    onSelect: (SavedDevice) -> Unit,
+    onAddDevice: () -> Unit,
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
@@ -60,37 +59,27 @@ internal fun DebugRemoteScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            "DEBUG LAYOUT · ${target.platform}",
+            "DEBUG LAYOUT · ${current.kind.platform}",
             style = monospace(MaterialTheme.typography.labelMedium),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         DebugPanel(
             listOf(
-                "target" to target.label,
-                "device" to tvName,
+                "kind" to current.kind.label,
+                "device" to current.name,
+                "id" to current.id,
                 "ready" to ready.toString(),
                 "busy" to busy.toString(),
                 "commands" to txCount.toString(),
             ),
         )
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            Target.entries.forEachIndexed { index, entry ->
-                SegmentedButton(
-                    selected = entry == target,
-                    onClick = { onTarget(entry) },
-                    enabled = !busy,
-                    shape = SegmentedButtonDefaults.itemShape(index, Target.entries.size),
-                ) { Text(entry.label) }
-            }
-        }
+        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice)
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onConnect != null) {
                 TextButton(onClick = onConnect, enabled = !busy) { Text(if (ready) "Reconnect TV" else "Connect TV") }
-                TextButton(onClick = onSettings, enabled = !busy) { Text("TV settings") }
-            } else {
-                TextButton(onClick = onSettings, enabled = !busy) { Text("Apple TV settings") }
-                if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
             }
+            if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
+            TextButton(onClick = onSettings, enabled = !busy) { Text("Device settings") }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onGeneralSettings) { Text("General settings") }
@@ -99,7 +88,7 @@ internal fun DebugRemoteScreen(
         DebugPanel(log.takeLast(DEBUG_LOG_LIMIT).reversed().map { it.time to it.text })
         RemoteKeys(
             dialSize = MinDialSize,
-            target = target,
+            kind = current.kind,
             navigationEnabled = navigationEnabled,
             onPress = onPress,
         )

@@ -22,9 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,6 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import fi.goodconsulting.kaukosaadin.device.DeviceKind
+import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.time.LocalTime
 import java.util.Locale
@@ -58,21 +57,22 @@ internal val FramedMinWidth = 480.dp
 internal val FramedMaxWidth = 420.dp
 
 /**
- * Only actual saved devices appear; controls require verified registration (LG) or
- * a saved pairing (Apple TV). [onConnect] is null for targets that verify per press,
- * and [onApps] is null for targets with no launchable-app list.
+ * Drives [current], one of the saved [devices]; controls require verified registration (LG) or
+ * a saved pairing (Apple TV). [onConnect] is null for devices that verify per press,
+ * and [onApps] is null for devices with no launchable-app list.
  */
 @Composable
 internal fun RemoteScreen(
     contentPadding: PaddingValues,
-    target: Target,
+    devices: List<SavedDevice>,
+    current: SavedDevice,
     layout: AppLayout,
-    tvName: String,
     ready: Boolean,
     busy: Boolean,
     wakeEnabled: Boolean,
     status: String,
-    onTarget: (Target) -> Unit,
+    onSelect: (SavedDevice) -> Unit,
+    onAddDevice: () -> Unit,
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
@@ -106,15 +106,16 @@ internal fun RemoteScreen(
     if (layout == AppLayout.Debug) {
         DebugRemoteScreen(
             contentPadding = contentPadding,
-            target = target,
-            tvName = tvName,
+            devices = devices,
+            current = current,
             ready = ready,
             busy = busy,
             wakeEnabled = wakeEnabled,
             txCount = txCount,
             log = log,
             navigationEnabled = navigationEnabled,
-            onTarget = onTarget,
+            onSelect = onSelect,
+            onAddDevice = onAddDevice,
             onConnect = onConnect,
             onApps = onApps,
             onSettings = onSettings,
@@ -125,8 +126,8 @@ internal fun RemoteScreen(
         return
     }
 
-    var showStatus by remember(target) { mutableStateOf(false) }
-    if (showStatus) StatusDialog(target, status) { showStatus = false }
+    var showStatus by remember(current.id) { mutableStateOf(false) }
+    if (showStatus) StatusDialog(current, status) { showStatus = false }
 
     RemoteCasing(contentPadding, modifier) { dialSize ->
         PowerDeck(
@@ -136,13 +137,14 @@ internal fun RemoteScreen(
             onWake = { wake() },
         )
         StatusControls(
-            target = target,
-            tvName = tvName,
+            devices = devices,
+            current = current,
             status = status,
             ready = ready,
             busy = busy,
             txFlash = { txFlash.value },
-            onTarget = onTarget,
+            onSelect = onSelect,
+            onAddDevice = onAddDevice,
             onConnect = onConnect,
             onApps = onApps,
             onSettings = onSettings,
@@ -150,11 +152,11 @@ internal fun RemoteScreen(
         )
         RemoteKeys(
             dialSize = dialSize,
-            target = target,
+            kind = current.kind,
             navigationEnabled = navigationEnabled,
             onPress = { key, action -> send(key, action) },
         )
-        RemoteFooter(target)
+        RemoteFooter(current.kind)
     }
 }
 
@@ -248,35 +250,27 @@ private fun RemoteCasing(
     }
 }
 
-/** Target picker, VFD readout and the connect / apps / TV-settings controls. */
+/** Device picker, VFD readout and the connect / apps / device-settings controls. */
 @Composable
 private fun StatusControls(
-    target: Target,
-    tvName: String,
+    devices: List<SavedDevice>,
+    current: SavedDevice,
     status: String,
     ready: Boolean,
     busy: Boolean,
     txFlash: () -> Float,
-    onTarget: (Target) -> Unit,
+    onSelect: (SavedDevice) -> Unit,
+    onAddDevice: () -> Unit,
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onShowStatus: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            Target.entries.forEachIndexed { index, entry ->
-                SegmentedButton(
-                    selected = entry == target,
-                    onClick = { onTarget(entry) },
-                    enabled = !busy,
-                    shape = SegmentedButtonDefaults.itemShape(index, Target.entries.size),
-                ) { Text(entry.label) }
-            }
-        }
+        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice)
         VfdDisplay(
-            target = target,
-            tvName = tvName,
+            kind = current.kind,
+            deviceName = current.name,
             ready = ready,
             status = status.uppercase(Locale.US),
             txFlash = txFlash,
@@ -296,25 +290,23 @@ private fun StatusControls(
                 TextButton(onClick = onConnect, enabled = !busy) {
                     Text(if (ready) "Reconnect TV" else "Connect TV")
                 }
-                TextButton(onClick = onSettings, enabled = !busy) { Text("TV settings") }
-            } else {
-                TextButton(onClick = onSettings, enabled = !busy) { Text("Apple TV settings") }
-                if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
             }
+            if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
+            TextButton(onClick = onSettings, enabled = !busy) { Text("Device settings") }
         }
     }
 }
 
 /** Wake-only note, speaker grille and model engraving at the tail of the casing. */
 @Composable
-private fun RemoteFooter(target: Target) {
+private fun RemoteFooter(kind: DeviceKind) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            if (target == Target.Lg) "Wake only · TV power is not monitored" else "No Apple TV wake · power is not monitored",
+            if (kind == DeviceKind.Lg) "Wake only · TV power is not monitored" else "No Apple TV wake · power is not monitored",
             style = MaterialTheme.typography.bodySmall,
             minLines = 2,
             maxLines = 2,
@@ -328,13 +320,13 @@ private fun RemoteFooter(target: Target) {
 /** Full status text; the remote itself only shows a trimmed preview. */
 @Composable
 private fun StatusDialog(
-    target: Target,
+    device: SavedDevice,
     status: String,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("${target.label} status") },
+        title = { Text("${device.name} status") },
         text = { Text(status) },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )

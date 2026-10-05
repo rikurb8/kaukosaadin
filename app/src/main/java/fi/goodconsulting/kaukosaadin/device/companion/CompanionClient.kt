@@ -25,11 +25,12 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** One Apple TV, one operation at a time; never queues or replays a press. */
+/** One saved Apple TV, keyed by its [id]; one operation at a time, never queues or replays a press. */
 @SuppressLint("UseKtx") // commit() results are checked; KTX edit {} would discard them.
 @Suppress("TooManyFunctions") // Pairing, commands and session ownership share one lock and credential store.
 class CompanionClient(
     context: Context,
+    id: String,
 ) {
     data class Result(
         val ok: Boolean,
@@ -38,8 +39,11 @@ class CompanionClient(
 
     private val appContext = context.applicationContext
 
-    // ponytail: one saved Apple TV, mirroring LgClient; add a list when more are needed.
-    private val prefs = appContext.getSharedPreferences("companion", Context.MODE_PRIVATE)
+    private val prefsName = "companion-$id"
+    private val prefs = appContext.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+
+    // The phone's own identity is shared by every Apple TV it pairs with.
+    private val identity = appContext.getSharedPreferences("companion-identity", Context.MODE_PRIVATE)
     private val lock = Mutex()
 
     // Owned exclusively under lock, including lifecycle shutdown.
@@ -71,7 +75,6 @@ class CompanionClient(
     val apps = mutableApps.asStateFlow()
 
     @Volatile private var pendingPin: Channel<String>? = null
-    val name get() = prefs.getString("name", "")!!
 
     // Boundary for every Apple TV command: unknown failures become a status message, never peer text.
     @Suppress("TooGenericExceptionCaught")
@@ -131,7 +134,6 @@ class CompanionClient(
                     .edit()
                     .putString("host", device.address.hostAddress)
                     .putInt("port", device.port)
-                    .putString("name", device.name)
                     .commit(),
             ) { "Could not save Apple TV. Pair again." }
             mutablePaired.value = true
@@ -231,11 +233,12 @@ class CompanionClient(
             }
         }
 
-    suspend fun forget() =
+    /** Drops this Apple TV's address and pairing; the shared Keystore key still protects the others. */
+    suspend fun delete() =
         operation {
             closeSession()
             check(prefs.edit().clear().commit()) { "Could not forget pairing." }
-            runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS) }
+            appContext.deleteSharedPreferences(prefsName)
             mutablePaired.value = false
             Result(true, "Pairing forgotten here. Also remove \"$DISPLAY_NAME\" in Apple TV Settings › Remotes and Devices.")
         }
@@ -273,9 +276,9 @@ class CompanionClient(
     /** Stable, non-secret per-install identity for _systemInfo (pyatv generates the same shapes). */
     private fun clientInfo(): CompanionClientInfo {
         val random = SecureRandom()
-        val rpId = prefs.getString("rpId", null) ?: ByteArray(6).also(random::nextBytes).joinToString("") { "%02x".format(it) }
-        val deviceId = prefs.getString("deviceId", null) ?: ByteArray(6).also(random::nextBytes).joinToString(":") { "%02X".format(it) }
-        prefs
+        val rpId = identity.getString("rpId", null) ?: ByteArray(6).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        val deviceId = identity.getString("deviceId", null) ?: ByteArray(6).also(random::nextBytes).joinToString(":") { "%02X".format(it) }
+        identity
             .edit()
             .putString("rpId", rpId)
             .putString("deviceId", deviceId)

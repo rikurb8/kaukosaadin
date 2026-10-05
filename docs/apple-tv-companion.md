@@ -17,8 +17,9 @@ launchable-app list was fetched from the real Apple TV on 2026-10-05 (36 apps, t
 request, so no operator action was needed), and the operator then launched **Yle Areena** from that
 list and re-confirmed arrows/OK on the same build. Phone-typed
 text is mirrored to the Apple TV's on-screen keyboard with focus-driven auto-open; that path
-passes the fake peer but is **not** real-device-verified. Wake is not implemented. The main remote's **LG TV / Apple TV**
-switch drives the saved Apple TV; LG behavior is unchanged. The crypto gate never uses the
+passes the fake peer but is **not** real-device-verified. Wake is not implemented. Apple TVs are saved
+devices like LG TVs: the remote's device picker drives whichever one is selected, and an Apple
+TV is the default until another device is chosen. The crypto gate never uses the
 LAN; the separate discovery screen only scans services. Neither accesses saved LG data.
 
 ## Pinned reference and dependency decision
@@ -169,7 +170,7 @@ Companion services can belong to Macs and other devices, not just Apple TVs.
 
 The debug-only `CompanionDiscoveryActivity` exposes Scan/Cancel and host/port results.
 There is no automatic scan, TCP connection, credential access, pairing or TV command.
-The main app's Apple TV setup screen uses the same scan.
+The main app's **Add device** screen runs the same scan next to the LG scan.
 
 ```bash
 ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:assembleRelease
@@ -216,12 +217,14 @@ double tap = two down/up pairs on the same connection, hold = down, 1 s, up (rel
 always attempted). The debug screen maps tap/double-tap/long-press on Menu and Home to
 these; operator-confirmed on the real Apple TV from the S25 (see below).
 
-The main app's Apple TV setup (`ui/AppleTvSetupScreen.kt`) scans, pairs with the TV's PIN
-and forgets; the main remote's Apple TV target exposes BACK (Menu), HOME (TV), Play/Pause,
+The main app's **Add device** screen (`ui/AddDeviceScreen.kt`) scans and pairs with the TV's PIN;
+**Device settings** removes it. The main remote, driving an Apple TV, exposes BACK (Menu), HOME (TV), Play/Pause,
 arrows and OK (Select), with double tap/hold on BACK and HOME. Play/Pause has no
 fake-peer test; it is operator-confirmed on the real Apple TV (below). It replaced the debug-only
-`CompanionRemoteActivity` and reuses its `companion` prefs and Keystore alias, so an
-existing pairing carries over.
+`CompanionRemoteActivity`. Each saved Apple TV now keeps its own `companion-<id>` prefs; all of
+them share the `companion-pairing` Keystore key and one `companion-identity` (rpId/deviceId), so
+removing one never invalidates another. The pre-saved-devices `companion` prefs are deleted, not
+migrated: pair again after upgrading.
 
 Interop check against pyatv's fake Companion Apple TV (`tools/companion_fake_atv.py`,
 which also verifies **our** M5/PV-M3 signatures like a real TV), using the venv from
@@ -285,7 +288,7 @@ best-effort on teardown (pyatv `CompanionAPI.disconnect`).
   `_tiStarted._c._tiD` carries the RTI session UUID and the keyboard's current text; the
   `_tiStart` reply carries the same archive when the keyboard was already focused before we
   connected (pyatv's own comment: `_tiStarted` is not sent in that case). Both paths feed
-  `CompanionClient.keyboard`, which drives `AppleTvKeyboardDialog` in `ui/AppleTvSetupScreen.kt`:
+  `CompanionClient.keyboard`, which drives `AppleTvKeyboardDialog` in `ui/AppleTvDialogs.kt`:
   the field and phone keyboard open on focus, edits are debounced, and dismissal follows
   `_tiStopped`.
 - `NskArchiver.kt` reads and writes the NSKeyedArchiver binary plist that carries those

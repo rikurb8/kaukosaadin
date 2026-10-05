@@ -1,5 +1,5 @@
-# Covers both a fresh install and an existing saved TV without erasing pairing.
-# No pairing, wake or navigation; setup only scans for LG advertisements.
+# Covers both a fresh install and existing saved devices without erasing pairing.
+# No pairing, wake or navigation; Add device only scans.
 appId: fi.goodconsulting.kaukosaadin
 tags:
   - smoke
@@ -11,16 +11,16 @@ tags:
 - assertNotVisible: "SOURCE"
 - runFlow:
     when:
-      visible: "No TVs added"
+      visible: "No devices added"
     commands:
       - assertNotVisible: "OK"
       - assertNotVisible: "Wake TV"
-      - tapOn: "Add LG TV"
+      - tapOn: "Find devices"
+# An LG TV is never connected at launch, so its keys start disabled.
 - runFlow:
     when:
-      visible: "TV settings"
+      visible: "WEBOS"
     commands:
-      - assertVisible: "WEBOS"
       - assertVisible:
           enabled: false
           containsChild:
@@ -32,24 +32,26 @@ tags:
           enabled: false
           containsChild:
             text: "BACK"
-      - tapOn: "TV settings"
-- assertVisible: "TV setup"
-- assertVisible: "Find LG TVs"
+- runFlow:
+    when:
+      visible: "Device settings"
+    commands:
+      - assertVisible: "(WEBOS|TVOS)"
+      - tapOn: ".* · (LG TV|Apple TV) ▾"
+      - tapOn: "Add device…"
+- assertVisible: "Add device"
+- assertVisible: "Enter LG TV address"
 - tapOn:
     text: "Done"
     index: 0
 - runFlow:
     when:
-      visible: "No TVs added"
+      visible: "No devices added"
     commands:
-      - assertVisible: "Add LG TV"
+      - assertVisible: "Find devices"
       - assertNotVisible: "OK"
 - runFlow:
     when:
-      visible: "TV settings"
+      visible: "Device settings"
     commands:
-      - assertVisible: "WEBOS"
-      - assertVisible:
-          enabled: false
-          containsChild:
-            text: "OK"
+      - assertVisible: "(WEBOS|TVOS)"

@@ -1,5 +1,14 @@
 # GOO-26 — LG G3 client and verification
 
+## Saved devices
+
+LG TVs are now saved devices alongside Apple TVs (`device/SavedDevices.kt`): any number of
+either, each with its own `lg-<id>` prefs. **Find devices** / **Add device** scans SSDP and Companion
+together; tapping an LG TV inspects its certificate and shows one **Trust this TV** dialog
+(name, SHA-256, **Trust & pair**), then the TV's PIN. **Device settings** holds rename, **Re-pair**,
+wake settings and **Remove device**. The pre-rework single `lg` prefs are deleted, not migrated.
+The sections below record the original single-TV build and its verification.
+
 ## Main remote integration
 
 The operator has confirmed that the main LG remote works. Exact tested actions and
@@ -49,11 +58,10 @@ pairing requests were sent. APK SHA-256:
 
 ## Client behavior
 
-`device/LgClient.kt` exposes `status: StateFlow<Result>` and suspend `save`, `inspect`,
-`connect`, `send(Action)`, `forget` methods. `ready: StateFlow<Boolean>` tracks successful
-registration for the main control gate (not TV power). `name` exposes the saved label;
-`saveName(address, name)` renames without touching pairing and `remove()` clears all saved
-TV settings. `save(address, fingerprint, name)` is independent of wake; `saveWake(address, mac, broadcast)` configures only Wake-on-LAN. PIN input uses
+`device/LgClient.kt` (one instance per saved TV id) exposes `status: StateFlow<Result>` and suspend
+`save`, `inspect`, `pair`, `connect`, `send(Action)`, `forget` methods. `ready: StateFlow<Boolean>` tracks successful
+registration for the main control gate (not TV power). Names live in `DeviceStore`, not the client;
+`delete()` clears all of this TV's settings. `save(address, fingerprint)` is independent of wake; `saveWake(address, mac, broadcast)` configures only Wake-on-LAN. PIN input uses
 `awaitingPin`, `submitPin(code)` and `cancelPairing()` on the same registration connection. `Result.ok` means the operation completed,
 NOT that the TV woke or moved selection. Call from a lifecycle-owned coroutine.
 Networking runs on Dispatchers.IO. Concurrent operations are refused, not queued;
@@ -127,11 +135,11 @@ TTL API works on our Android 29 floor, unlike upstream `DatagramSocket.setOption
 TTL/MX are 1 for same-subnet discovery, keeping the three upstream search rounds.
 A Wi-Fi multicast lock exists only during scanning. The normal scan deadline is 6 seconds.
 
-Opening **TV settings** automatically scans for awake TVs; **Find LG TVs** retries.
-Selecting an untrusted advertisement populates the IPv4 address and draft display name only. Discovery cannot
+Opening **Add device** automatically scans for awake TVs (`scanLg`); **Scan again** retries.
+Selecting an untrusted advertisement only inspects its certificate for the trust dialog. Discovery cannot
 prove identity and never pairs, approves a certificate or sends a TV command. Untrusted
 LOCATION URLs are retained as metadata but never fetched. Sleeping devices may not
-answer, so saved setup persists and **Manual address fallback** remains available.
+answer, so saved setup persists and **Enter LG TV address** remains available.
 SSDP provides no MAC: the active-interface MAC/subnet broadcast remain operator input;
 we did not copy insecure HTTP/WebSocket enrichment to eliminate those fields.
 

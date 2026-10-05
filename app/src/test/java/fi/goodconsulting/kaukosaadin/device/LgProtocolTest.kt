@@ -19,15 +19,6 @@ class LgProtocolTest {
         }
     }
 
-    @Test fun tvNamesAreSafeAndNotModelSpecific() {
-        assertEquals("Living Room", LgProtocol.tvName("  Living Room  "))
-        assertEquals("Olohuoneen TV", LgProtocol.tvName("Olohuoneen TV"))
-        assertEquals("LGTV", LgProtocol.tvName("LG\nTV\u0000"))
-        assertEquals("LG TV", LgProtocol.tvName(" \n\t "))
-        assertEquals("LG TV", LgProtocol.tvName(""))
-        assertEquals(160, LgProtocol.tvName("x".repeat(200)).length)
-    }
-
     @Test fun pairingDoesNotRequireWakeDetails() {
         val pin = "AB".repeat(32)
         assertEquals(pin.lowercase(), LgProtocol.pairingFingerprint("192.168.1.2", pin))

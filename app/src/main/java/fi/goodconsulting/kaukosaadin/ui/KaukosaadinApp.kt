@@ -34,8 +34,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import fi.goodconsulting.kaukosaadin.device.DeviceKind
+import fi.goodconsulting.kaukosaadin.device.DeviceStore
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
+import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionDiscovery
 import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
@@ -45,17 +48,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** The saved device the remote drives; each keeps its own pairing and status. */
-internal enum class Target(
-    val label: String,
-    val annunciator: String,
-    val platform: String,
-) {
-    Lg("LG TV", "TV", "WEBOS"),
-    AppleTv("Apple TV", "ATV", "TVOS"),
-}
+/** Where the app is; every screen but the remote returns to it. */
+private enum class Screen { Remote, AddDevice, DeviceSettings, Apps, GeneralSettings }
 
-/** Remote keys and the command each target sends; LG has no Home or Play/Pause key. */
+/** Remote keys and the command each device kind sends; LG has no Home or Play/Pause key. */
 internal enum class RemoteKey(
     val lg: LgProtocol.Action?,
     val hid: HidCommand,
@@ -88,85 +84,51 @@ internal enum class Direction(
     val label get() = key.name
 }
 
-// ponytail: the shell owns both clients, saved-target fallback and routing in one place;
-// split into state holders when a third target or screen lands.
-
 /**
- * One LG client and one Apple TV client share setup, pairing and readiness across
- * the screens; the remote drives whichever saved device is the selected target.
+ * The saved devices and the one the remote drives. Only that device's client exists; switching
+ * devices builds a fresh one, which drops the previous device's session and status.
  */
-@Suppress("CyclomaticComplexMethod", "LongMethod")
+@Suppress("CyclomaticComplexMethod", "LongMethod") // Screen routing and the Apple session lifecycle share one state.
 @Composable
 fun KaukosaadinApp() {
     val context = LocalContext.current.applicationContext
-    val client = remember { LgClient(context) }
-    val apple = remember { CompanionClient(context) }
+    val store = remember { DeviceStore(context) }
     val discovery = remember { CompanionDiscovery(context) }
-    val scope = rememberCoroutineScope()
-    val status by client.status.collectAsState()
-    val ready by client.ready.collectAsState()
-    val appleStatus by apple.status.collectAsState()
-    val applePaired by apple.paired.collectAsState()
+    val devices by store.devices.collectAsState()
+    val selectedId by store.selectedId.collectAsState()
+    val current = DeviceStore.current(devices, selectedId)
+    val lg = remember(current?.id) { current?.takeIf { it.kind == DeviceKind.Lg }?.let { LgClient(context, it.id) } }
+    val apple = remember(current?.id) { current?.takeIf { it.kind == DeviceKind.AppleTv }?.let { CompanionClient(context, it.id) } }
     val preferences = remember { context.getSharedPreferences("general_settings", android.content.Context.MODE_PRIVATE) }
     var theme by remember { mutableStateOf(AppTheme.fromId(preferences.getString("theme", null))) }
     var layout by remember { mutableStateOf(AppLayout.fromId(preferences.getString("layout", null))) }
-    var generalSettings by rememberSaveable { mutableStateOf(false) }
-    var lgSettings by remember { mutableStateOf(false) }
-    var appleSettings by remember { mutableStateOf(false) }
-    var appleApps by remember { mutableStateOf(false) }
-    var selected by rememberSaveable { mutableStateOf(Target.Lg) }
-    var busy by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<LgClient.Result?>(null) }
+    var screen by rememberSaveable { mutableStateOf(Screen.Remote) }
     var appleConnecting by remember { mutableStateOf(false) }
-
-    fun run(block: suspend () -> Unit) {
-        if (busy) return
-        busy = true
-        scope.launch {
-            try {
-                block()
-            } finally {
-                busy = false
-            }
-        }
-    }
-    val lgSaved = client.host.isNotEmpty()
-    // Fall back to whichever device is actually saved, e.g. after removing the other.
-    val target =
-        when {
-            selected == Target.Lg && !lgSaved && applePaired -> Target.AppleTv
-            selected == Target.AppleTv && !applePaired && lgSaved -> Target.Lg
-            else -> selected
-        }
 
     val activity = LocalActivity.current
     // The Apple session stays open while the apps screen is shown: it needs the TV to list and launch.
-    val appleRemoteVisible = target == Target.AppleTv && applePaired && !generalSettings && !lgSettings && !appleSettings
-    val remoteVisible by rememberUpdatedState(appleRemoteVisible)
+    val appleRemoteVisible = apple != null && (screen == Screen.Remote || screen == Screen.Apps)
+    val sessionClient by rememberUpdatedState(apple.takeIf { appleRemoteVisible })
     LaunchedEffect(activity) {
-        snapshotFlow { remoteVisible }.collectLatest { visible ->
-            if (visible && activity is LifecycleOwner) {
+        snapshotFlow { sessionClient }.collectLatest { client ->
+            if (client != null && activity is LifecycleOwner) {
                 activity.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                     try {
                         appleConnecting = true
                         try {
-                            apple.connect()
+                            client.connect()
                         } finally {
                             appleConnecting = false
                         }
                         awaitCancellation()
                     } finally {
-                        withContext(NonCancellable) { apple.disconnect() }
+                        withContext(NonCancellable) { client.disconnect() }
                     }
                 }
             }
         }
     }
 
-    fun openSettings(to: Target) {
-        selected = to
-        if (to == Target.Lg) lgSettings = true else appleSettings = true
-    }
     val colors =
         when (theme) {
             AppTheme.Classic -> if (isSystemInDarkTheme()) DarkColors else LightColors
@@ -182,86 +144,158 @@ fun KaukosaadinApp() {
             bars.isAppearanceLightNavigationBars = light
         }
     }
+    val toRemote = { screen = Screen.Remote }
     MaterialTheme(colorScheme = colors) {
-        LgPinDialog(client)
-        AppleTvPinDialog(apple)
-        if (appleRemoteVisible) AppleTvKeyboardDialog(apple)
+        lg?.let { LgPinDialog(it) }
+        apple?.takeIf { appleRemoteVisible }?.let { AppleTvKeyboardDialog(it) }
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
         ) { innerPadding ->
-            if (generalSettings) {
-                GeneralSettingsScreen(innerPadding, theme, onTheme = {
-                    theme = it
-                    preferences.edit().putString("theme", it.id).apply()
-                }, layout = layout, onLayout = {
-                    layout = it
-                    preferences.edit().putString("layout", it.id).apply()
-                }, onBack = { generalSettings = false })
-            } else if (lgSettings) {
-                LgConnectionScreen(innerPadding, client) {
-                    result = null
-                    lgSettings = false
+            when {
+                screen == Screen.GeneralSettings ->
+                    GeneralSettingsScreen(innerPadding, theme, onTheme = {
+                        theme = it
+                        preferences.edit().putString("theme", it.id).apply()
+                    }, layout = layout, onLayout = {
+                        layout = it
+                        preferences.edit().putString("layout", it.id).apply()
+                    }, onBack = toRemote)
+                screen == Screen.AddDevice -> AddDeviceScreen(innerPadding, store, discovery, onBack = toRemote, onAdded = toRemote)
+                current == null ->
+                    EmptyRemoteScreen(
+                        innerPadding,
+                        onFindDevices = { screen = Screen.AddDevice },
+                        onGeneralSettings = { screen = Screen.GeneralSettings },
+                    )
+                screen == Screen.DeviceSettings -> DeviceSettingsScreen(innerPadding, current, store, lg, apple, onBack = toRemote)
+                screen == Screen.Apps && apple != null -> AppleTvAppsScreen(innerPadding, apple, onBack = toRemote)
+                else -> {
+                    val remote =
+                        RemoteActions(
+                            devices = devices,
+                            current = current,
+                            layout = layout,
+                            onSelect = { store.select(it.id) },
+                            onAddDevice = { screen = Screen.AddDevice },
+                            onSettings = { screen = Screen.DeviceSettings },
+                            onGeneralSettings = { screen = Screen.GeneralSettings },
+                        )
+                    if (lg != null) {
+                        LgRemote(innerPadding, remote, lg)
+                    } else if (apple != null) {
+                        AppleTvRemote(innerPadding, remote, apple, appleConnecting, onApps = { screen = Screen.Apps })
+                    }
                 }
-            } else if (appleSettings) {
-                AppleTvSetupScreen(innerPadding, apple, discovery) {
-                    appleSettings = false
-                }
-            } else if (appleApps) {
-                AppleTvAppsScreen(innerPadding, apple) { appleApps = false }
-            } else if (!lgSaved && !applePaired) {
-                EmptyRemoteScreen(innerPadding, onAdd = ::openSettings, onGeneralSettings = { generalSettings = true })
-            } else if (target == Target.Lg) {
-                RemoteScreen(
-                    contentPadding = innerPadding,
-                    target = target,
-                    layout = layout,
-                    tvName = client.name,
-                    ready = ready,
-                    busy = busy,
-                    wakeEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
-                    status = (if (busy) status else result ?: status).message,
-                    onTarget = { if (it == Target.Lg || applePaired) selected = it else openSettings(it) },
-                    onConnect = {
-                        if (client.host.isEmpty() || client.fingerprint.isEmpty()) {
-                            lgSettings = true
-                        } else {
-                            run { result = client.connect() }
-                        }
-                    },
-                    onSettings = { lgSettings = true },
-                    onApps = null,
-                    onGeneralSettings = { generalSettings = true },
-                    onWake = { run { result = client.send(LgProtocol.Action.Wake) } },
-                    onKey = { key, _ -> key.lg?.let { action -> run { result = client.send(action) } } },
-                )
-            } else {
-                RemoteScreen(
-                    contentPadding = innerPadding,
-                    target = target,
-                    layout = layout,
-                    tvName = apple.name,
-                    ready = applePaired,
-                    busy = busy || appleConnecting,
-                    wakeEnabled = false,
-                    status = appleStatus.message,
-                    onTarget = { if (it == Target.AppleTv || lgSaved) selected = it else openSettings(it) },
-                    onConnect = null,
-                    onApps = { appleApps = true },
-                    onSettings = { appleSettings = true },
-                    onGeneralSettings = { generalSettings = true },
-                    onWake = {},
-                    onKey = { key, action -> run { apple.press(key.hid, action) } },
-                )
             }
         }
     }
 }
 
+/** What every remote shares, whichever kind of device it drives. */
+private class RemoteActions(
+    val devices: List<SavedDevice>,
+    val current: SavedDevice,
+    val layout: AppLayout,
+    val onSelect: (SavedDevice) -> Unit,
+    val onAddDevice: () -> Unit,
+    val onSettings: () -> Unit,
+    val onGeneralSettings: () -> Unit,
+)
+
+/** LG verifies registration with Connect and opens a fresh, pinned TLS session per press. */
+@Composable
+private fun LgRemote(
+    padding: PaddingValues,
+    remote: RemoteActions,
+    client: LgClient,
+) {
+    val scope = rememberCoroutineScope()
+    val status by client.status.collectAsState()
+    val ready by client.ready.collectAsState()
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<LgClient.Result?>(null) }
+
+    fun run(block: suspend () -> LgClient.Result) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                result = block()
+            } finally {
+                busy = false
+            }
+        }
+    }
+    RemoteScreen(
+        contentPadding = padding,
+        devices = remote.devices,
+        current = remote.current,
+        layout = remote.layout,
+        ready = ready,
+        busy = busy,
+        wakeEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
+        status = (if (busy) status else result ?: status).message,
+        onSelect = remote.onSelect,
+        onAddDevice = remote.onAddDevice,
+        onConnect = { if (client.fingerprint.isEmpty()) remote.onSettings() else run { client.connect() } },
+        onApps = null,
+        onSettings = remote.onSettings,
+        onGeneralSettings = remote.onGeneralSettings,
+        onWake = { run { client.send(LgProtocol.Action.Wake) } },
+        onKey = { key, _ -> key.lg?.let { action -> run { client.send(action) } } },
+    )
+}
+
+/** The Apple TV session is opened by the shell while this is visible; presses reuse it. */
+@Composable
+private fun AppleTvRemote(
+    padding: PaddingValues,
+    remote: RemoteActions,
+    client: CompanionClient,
+    connecting: Boolean,
+    onApps: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val status by client.status.collectAsState()
+    val paired by client.paired.collectAsState()
+    var busy by remember { mutableStateOf(false) }
+
+    fun run(block: suspend () -> Unit) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                block()
+            } finally {
+                busy = false
+            }
+        }
+    }
+    RemoteScreen(
+        contentPadding = padding,
+        devices = remote.devices,
+        current = remote.current,
+        layout = remote.layout,
+        ready = paired,
+        busy = busy || connecting,
+        wakeEnabled = false,
+        status = status.message,
+        onSelect = remote.onSelect,
+        onAddDevice = remote.onAddDevice,
+        onConnect = null,
+        onApps = onApps,
+        onSettings = remote.onSettings,
+        onGeneralSettings = remote.onGeneralSettings,
+        onWake = {},
+        onKey = { key, action -> run { client.press(key.hid, action) } },
+    )
+}
+
 @Composable
 private fun EmptyRemoteScreen(
     contentPadding: PaddingValues,
-    onAdd: (Target) -> Unit,
+    onFindDevices: () -> Unit,
     onGeneralSettings: () -> Unit,
 ) {
     Column(
@@ -270,11 +304,10 @@ private fun EmptyRemoteScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
         EngravedLabel("KAUKOSÄÄDIN")
-        Text("No TVs added", style = MaterialTheme.typography.headlineSmall)
-        Text("Add your TV to start using the remote.", style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = { onAdd(Target.Lg) }) { Text("Add LG TV") }
-        Button(onClick = { onAdd(Target.AppleTv) }) { Text("Add Apple TV") }
-        Text("Supports LG webOS TVs and Apple TV on your Wi-Fi", style = MaterialTheme.typography.bodySmall)
+        Text("No devices added", style = MaterialTheme.typography.headlineSmall)
+        Text("Scan your Wi-Fi for TVs and Apple TVs to start using the remote.", style = MaterialTheme.typography.bodyMedium)
+        Button(onClick = onFindDevices) { Text("Find devices") }
+        Text("Supports Apple TV and LG webOS TVs", style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = onGeneralSettings) { Text("General settings") }
     }
 }

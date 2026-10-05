@@ -37,17 +37,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import java.util.Locale
 
 /**
- * Amber VFD behind a smoked bezel: annunciators for target, readiness and TX on
+ * Amber VFD behind a smoked bezel: annunciators for device kind, readiness and TX on
  * top, the targeted device in large glowing type, and the command echo with
  * a blinking cursor.
  */
 @Composable
 internal fun VfdDisplay(
-    target: Target,
-    tvName: String,
+    kind: DeviceKind,
+    deviceName: String,
     ready: Boolean,
     status: String,
     txFlash: () -> Float,
@@ -72,7 +73,7 @@ internal fun VfdDisplay(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Annunciator(target.annunciator, lit = true)
+                Annunciator(kind.annunciator, lit = true)
                 Spacer(Modifier.weight(1f))
                 Annunciator("READY", lit = ready)
                 Annunciator("SETUP", lit = !ready)
@@ -80,7 +81,7 @@ internal fun VfdDisplay(
             }
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = tvName.uppercase(Locale.US),
+                    text = deviceName.uppercase(Locale.US),
                     style = vfdStyle(MaterialTheme.typography.headlineSmall, if (ready) LcdText else LcdDim),
                     letterSpacing = 2.sp,
                     minLines = 2,
@@ -89,7 +90,7 @@ internal fun VfdDisplay(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = target.platform,
+                    text = kind.platform,
                     style = vfdStyle(MaterialTheme.typography.labelMedium, LcdDim),
                     letterSpacing = 1.sp,
                     modifier = Modifier.padding(bottom = 4.dp),
