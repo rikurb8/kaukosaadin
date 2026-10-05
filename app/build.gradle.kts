@@ -33,6 +33,9 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // The host and debug Android runner use the exact same synthetic reference vectors.
+    sourceSets.getByName("testDebug").resources.directories.add("src/debug/assets")
 }
 
 kotlin {
@@ -42,6 +45,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.bcprov)
     implementation(libs.okhttp)
     testImplementation(libs.junit)
     testImplementation(libs.json)
