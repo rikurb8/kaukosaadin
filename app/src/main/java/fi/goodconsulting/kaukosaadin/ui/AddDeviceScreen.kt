@@ -27,8 +27,8 @@ import fi.goodconsulting.kaukosaadin.device.DeviceStore
 import kotlinx.coroutines.launch
 
 /**
- * One scan for every supported device, one section per registered integration: LG TVs and Apple
- * TVs side by side. Picking one pairs it with the PIN it shows and saves it; nothing pairs
+ * One scan for every supported device, one section per registered integration: LG TVs, Apple
+ * TVs and Hue Bridges side by side. Picking one pairs it and saves it; nothing pairs
  * automatically. Each section scans from the one Scan button and reports its own failures.
  */
 @Composable
@@ -78,7 +78,7 @@ fun AddDeviceScreen(
     ) {
         Text("Add device", style = MaterialTheme.typography.titleLarge)
         TextButton(onClick = onBack) { Text("Done") }
-        Text("Finds LG webOS TVs and Apple TVs on your Wi-Fi. Pick one to pair it with the PIN it shows.")
+        Text("Finds LG webOS TVs, Apple TVs and Hue Bridges on your Wi-Fi. Pair a TV with the PIN it shows, or a bridge with its link button.")
         Button(enabled = scans == 0, onClick = { scanToken++ }) { Text(if (scans > 0) "Scanning…" else "Scan again") }
         if (message.isNotEmpty()) Text(message)
         DeviceIntegrations.all.forEach { it.Setup(host) }

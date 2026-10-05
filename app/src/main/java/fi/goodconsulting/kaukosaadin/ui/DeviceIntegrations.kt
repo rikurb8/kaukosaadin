@@ -13,7 +13,7 @@ import fi.goodconsulting.kaukosaadin.device.SavedDevice
  * the Add device section order.
  */
 internal object DeviceIntegrations {
-    val all: List<DeviceIntegration> = listOf(AppleTvIntegration, LgIntegration)
+    val all: List<DeviceIntegration> = listOf(AppleTvIntegration, LgIntegration, HueIntegration)
 
     /** The integration for [kind]; every [DeviceKind] has exactly one (see DeviceIntegrationsTest). */
     fun of(kind: DeviceKind): DeviceIntegration = all.first { it.kind == kind }
