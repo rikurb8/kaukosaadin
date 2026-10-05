@@ -100,7 +100,9 @@ app and are remembered across restarts.
 
 UI and device-network code live in separate packages in the single `app` module. A small
 saved-device store (`device/SavedDevices.kt`) lists the devices and their kind; each kind keeps
-its own client and per-device storage. There is no DI framework and no multi-module setup.
+its own client and per-device storage. Every kind registers its setup, main screen and settings
+extras through `ui/DeviceIntegrations.kt`; see [Device integrations](docs/integrations.md) for the
+seam and how to add a kind. There is no DI framework and no multi-module setup.
 
 ## App ID
 

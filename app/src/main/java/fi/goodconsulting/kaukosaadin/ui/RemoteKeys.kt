@@ -51,11 +51,48 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
+import fi.goodconsulting.kaukosaadin.device.LgProtocol
+import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+
+/** Remote keys and the command each device kind sends; LG has no Home, Play/Pause or volume key. */
+internal enum class RemoteKey(
+    val lg: LgProtocol.Action?,
+    val hid: HidCommand,
+) {
+    Up(LgProtocol.Action.Up, HidCommand.Up),
+    Down(LgProtocol.Action.Down, HidCommand.Down),
+    Left(LgProtocol.Action.Left, HidCommand.Left),
+    Right(LgProtocol.Action.Right, HidCommand.Right),
+    Select(LgProtocol.Action.Select, HidCommand.Select),
+    Back(LgProtocol.Action.Back, HidCommand.Menu),
+    Home(null, HidCommand.Home),
+    PlayPause(null, HidCommand.PlayPause),
+    VolumeDown(null, HidCommand.VolumeDown),
+    VolumeUp(null, HidCommand.VolumeUp),
+}
+
+/** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. Angles
+ *  are a 90°-per-quarter geometry table, not tunables. */
+@Suppress("MagicNumber")
+internal enum class Direction(
+    val key: RemoteKey,
+    val rotation: Float,
+    val alignment: Alignment,
+    val wedgeStart: Float,
+) {
+    Up(RemoteKey.Up, 0f, Alignment.TopCenter, -135f),
+    Right(RemoteKey.Right, 90f, Alignment.CenterEnd, -45f),
+    Down(RemoteKey.Down, 180f, Alignment.BottomCenter, 45f),
+    Left(RemoteKey.Left, 270f, Alignment.CenterStart, 135f),
+    ;
+
+    val label get() = key.name
+}
 
 /** Apple TV Back (Menu) and Home also take double tap and 1 s hold, like the Siri Remote. */
 internal fun gestures(
