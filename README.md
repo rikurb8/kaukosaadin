@@ -1,11 +1,34 @@
 # Kaukosäädin
 
-Android TV remote for your home network: **Apple TV** and **LG webOS TVs** (the first TV
-brand supported).
+Your Android phone becomes the remote for the TVs in your
+living room: **Apple TV** and **LG webOS TVs**. It talks to them directly over your home
+Wi-Fi, with no cloud, account or bridge in between.
+
+|  | Apple TV | LG webOS TV |
+| --- | --- | --- |
+| **Find** | Wi-Fi scan (Companion mDNS) | Wi-Fi scan (SSDP) or address by hand |
+| **Pair** | PIN shown on the TV | Pinned TLS certificate, then PIN |
+| **Navigate** | Arrows, OK, BACK (Menu), HOME (TV), Play/Pause | Arrows, OK, BACK |
+| **Extras** | App launcher; type on the phone, text appears on the TV | Wake-on-LAN |
+| **Tested on** | A real Apple TV, from a Galaxy S25 | LG G3 |
+
+Save as many devices as you like and flip between them from the picker. Pick the **Classic**
+look, or **Hacker man** if you want green-on-black.
+
+**Try it** with one phone attached over USB (see [prerequisites](#prerequisites)):
+
+```bash
+./gradlew :app:installDebug
+adb shell am start -n fi.goodconsulting.kaukosaadin/.MainActivity
+```
+
+## Using the app
+
+### Adding devices
 
 Fresh installs show **No devices added**. Tap **Find devices** to scan your Wi-Fi: LG TVs
-(SSDP) and Apple TVs (Companion mDNS) are found together and listed with their advertised name and
-address, or you can **Enter LG TV address** by hand. Tap a device to pair it, and it is saved:
+and Apple TVs are found together and listed with their advertised name and address, or you
+can **Enter LG TV address** by hand. Tap a device to pair it, and it is saved:
 
 - **Apple TV** pairs with the PIN it shows.
 - **LG TV** shows one **Trust this TV?** dialog with an editable name and the TV's certificate
@@ -18,36 +41,46 @@ one, an Apple TV is the default if one is saved. **Device settings** renames the
 Wake-on-LAN settings. Upgrading from the single-slot build drops the old LG/Apple TV pairings:
 pair them again from **Find devices**.
 
-On an LG TV, **Connect TV** reuses saved pairing. The arrows, **OK** and **BACK** send real
-commands; navigation is disabled before connecting, while busy and after a failed command.
-Commands are never replayed automatically. **Wake TV** is wake-only, enabled with saved
-MAC/broadcast settings. After waking, wait for the TV and tap Connect. READY/LEDs indicate
-verified registration, not TV power or a persistent socket.
+### Apple TV
 
-On an Apple TV the remote has arrows, **OK**, **BACK** (Menu), **HOME** (TV) and **Play/Pause**;
+The remote has arrows, **OK**, **BACK** (Menu), **HOME** (TV) and **Play/Pause**;
 BACK/HOME also take double tap and a 1 s hold.
-**Apps** lists what the Apple TV reports as launchable and starts the one you tap (36 apps on the
-real Apple TV; list and launch both operator-confirmed, and the startup request they need was
-found on the real TV).
-Opening the Apple TV remote connects once and reuses the verified session while the screen
-is visible, including while the apps list is open; leaving, switching device or backgrounding it
-closes the connection, and failed presses are never replayed or queued. When the Apple TV's
-on-screen keyboard appears, the app opens a text field and mirrors what you type to the TV
-(fake-peer verified, not yet checked on a real Apple TV). There is no Apple TV wake. Pairing and
-Home/Menu tap, double tap and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV
-from the S25. See [Apple TV Companion](docs/apple-tv-companion.md); a debug-only crypto gate and
-discovery screen remain there.
+
+- **Apps** lists what the Apple TV reports as launchable and starts the one you tap (36 apps on
+  the real Apple TV; list and launch both operator-confirmed, and the startup request they need
+  was found on the real TV).
+- When the Apple TV's on-screen keyboard appears, the app opens a text field and mirrors what
+  you type to the TV (fake-peer verified, not yet checked on a real Apple TV).
+- There is no Apple TV wake.
+
+Opening the remote connects once and reuses the verified session while the screen is visible,
+including while the apps list is open; leaving, switching device or backgrounding it closes the
+connection, and failed presses are never replayed or queued. Pairing and Home/Menu tap, double
+tap and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25. See
+[Apple TV Companion](docs/apple-tv-companion.md); a debug-only crypto gate and discovery screen
+remain there.
+
+### LG TV
+
+**Connect TV** reuses saved pairing. The arrows, **OK** and **BACK** send real commands;
+navigation is disabled before connecting, while busy and after a failed command. Commands are
+never replayed automatically. **Wake TV** is wake-only, enabled with saved MAC/broadcast
+settings. After waking, wait for the TV and tap Connect. READY/LEDs indicate verified
+registration, not TV power or a persistent socket.
 
 PIN pairing and saved-pairing reconnect have been operator-verified on the LG G3.
 See [LG verification and operator handoff](docs/lg-g3.md) for physical-action checks.
 
+### Settings
+
 **General settings** is available from both the empty screen and the remote, separately
-from device settings. **Theme** picks the palette: **Classic** (the original palette, following
-system light/dark mode) or **Hacker man** (a green-on-black demo theme). **Layout** picks how
-the remote screen is presented: **Standard** (the full casing, wheel and VFD display) or
-**Debug** (flat panels with a live timestamped status log, for development and
-troubleshooting). Theme and layout are independent; both apply immediately throughout the
+from device settings. Theme and layout are independent; both apply immediately throughout the
 app and are remembered across restarts.
+
+- **Theme**: **Classic** (the original palette, following system light/dark mode) or
+  **Hacker man** (a green-on-black demo theme).
+- **Layout**: **Standard** (the full casing, wheel and VFD display) or **Debug** (flat panels
+  with a live timestamped status log, for development and troubleshooting).
 
 ## Repository layout
 
