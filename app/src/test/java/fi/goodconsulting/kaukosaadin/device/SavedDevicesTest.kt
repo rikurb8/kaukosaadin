@@ -1,5 +1,6 @@
 package fi.goodconsulting.kaukosaadin.device
 
+import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -13,6 +14,23 @@ class SavedDevicesTest {
         val devices = listOf(lg, appleTv, lg2)
         assertEquals(devices, DeviceStore.decode(DeviceStore.encode(devices)))
         assertEquals(emptyList<SavedDevice>(), DeviceStore.decode(DeviceStore.encode(emptyList())))
+    }
+
+    @Test fun storedListKeepsTheKnownKeys() {
+        // Installs in the field already hold these exact keys under the "devices" "list" preference;
+        // renaming one would drop their saved devices and pairings.
+        val entry = JSONArray(DeviceStore.encode(listOf(lg))).getJSONObject(0)
+        assertEquals("lg-1", entry.getString("id"))
+        assertEquals("Lg", entry.getString("kind"))
+        assertEquals("Living Room", entry.getString("name"))
+        assertEquals("192.168.1.20", entry.getString("host"))
+    }
+
+    @Test fun aStoredListFromAnExistingInstallDecodesUnchanged() {
+        val stored =
+            """[{"kind":"AppleTv","name":"Olohuone","host":"192.168.1.30","id":"atv-1"},""" +
+                """{"id":"lg-1","kind":"Lg","name":"Living Room","host":"192.168.1.20"}]"""
+        assertEquals(listOf(appleTv, lg), DeviceStore.decode(stored))
     }
 
     @Test fun lastUsedDeviceWins() {
