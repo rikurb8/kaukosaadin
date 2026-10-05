@@ -59,7 +59,8 @@ internal val FramedMaxWidth = 420.dp
 
 /**
  * Only actual saved devices appear; controls require verified registration (LG) or
- * a saved pairing (Apple TV). [onConnect] is null for targets that verify per press.
+ * a saved pairing (Apple TV). [onConnect] is null for targets that verify per press,
+ * and [onApps] is null for targets with no launchable-app list.
  */
 @Composable
 internal fun RemoteScreen(
@@ -73,6 +74,7 @@ internal fun RemoteScreen(
     status: String,
     onTarget: (Target) -> Unit,
     onConnect: (() -> Unit)?,
+    onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onGeneralSettings: () -> Unit,
     onWake: () -> Unit,
@@ -114,6 +116,7 @@ internal fun RemoteScreen(
             navigationEnabled = navigationEnabled,
             onTarget = onTarget,
             onConnect = onConnect,
+            onApps = onApps,
             onSettings = onSettings,
             onGeneralSettings = onGeneralSettings,
             onWake = { wake() },
@@ -141,6 +144,7 @@ internal fun RemoteScreen(
             txFlash = { txFlash.value },
             onTarget = onTarget,
             onConnect = onConnect,
+            onApps = onApps,
             onSettings = onSettings,
             onShowStatus = { showStatus = true },
         )
@@ -244,7 +248,7 @@ private fun RemoteCasing(
     }
 }
 
-/** Target picker, VFD readout and the connect / TV-settings controls. */
+/** Target picker, VFD readout and the connect / apps / TV-settings controls. */
 @Composable
 private fun StatusControls(
     target: Target,
@@ -255,6 +259,7 @@ private fun StatusControls(
     txFlash: () -> Float,
     onTarget: (Target) -> Unit,
     onConnect: (() -> Unit)?,
+    onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onShowStatus: () -> Unit,
 ) {
@@ -294,6 +299,7 @@ private fun StatusControls(
                 TextButton(onClick = onSettings, enabled = !busy) { Text("TV settings") }
             } else {
                 TextButton(onClick = onSettings, enabled = !busy) { Text("Apple TV settings") }
+                if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
             }
         }
     }

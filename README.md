@@ -22,9 +22,12 @@ persistent socket.
 **Add Apple TV** (or **Apple TV settings**) scans for Companion services, pairs with the
 PIN the Apple TV shows and can forget the pairing. Its remote has arrows, **OK**, **BACK**
 (Menu), **HOME** (TV) and **Play/Pause**; BACK/HOME also take double tap and a 1 s hold.
+**Apps** lists what the Apple TV reports as launchable and starts the one you tap (36 apps on the
+real Apple TV; list and launch both operator-confirmed, and the startup request they need was
+found on the real TV).
 Opening the Apple TV remote connects once and reuses the verified session while the screen
-is visible; leaving or backgrounding it closes the connection, and failed presses are never
-replayed or queued. When the Apple TV's on-screen keyboard appears, the app opens a text
+is visible, including while the apps list is open; leaving or backgrounding it closes the
+connection, and failed presses are never replayed or queued. When the Apple TV's on-screen keyboard appears, the app opens a text
 field and mirrors what you type to the TV (fake-peer verified, not yet checked on a real
 Apple TV). There is no Apple TV wake. Pairing and Home/Menu tap, double tap
 and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25. See [Apple TV Companion](docs/apple-tv-companion.md); a debug-only

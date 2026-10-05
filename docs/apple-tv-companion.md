@@ -2,15 +2,20 @@
 
 ## Current boundary
 
-**Apple TV remote in the main app; pairing and Home/Menu verified on the real Apple TV.** Host
+**Apple TV remote in the main app; pairing and Home/Menu verified on the real Apple TV;**
+**launchable apps are fake-peer checked only.** Host
 checks, Android packaging and lint pass, and the required S25 crypto gate **passed
 6/6 on hardware** (re-run 2026-10-04 after the PIN fix below). Android NSD discovery
 resolves the Apple TV's advertised host/port. Framing, OPACK, TLV8, PIN pair-setup,
-pair-verify, Keystore credential storage, session startup and HID presses (Menu/Back,
-Home/TV, arrows, Select) are implemented and pass against pinned pyatv's fake Apple TV,
-and pairing + Home/Menu tap, double tap and hold were operator-confirmed on the real
+pair-verify, Keystore credential storage, session startup, HID presses (Menu/Back,
+Home/TV, arrows, Select) and the launchable-app list plus app launch are implemented and pass
+against pinned pyatv's fake Apple TV, and pairing + Home/Menu tap, double tap and hold were
+operator-confirmed on the real
 Apple TV, from the host JVM and from the S25 app (2026-10-04, below); arrows, Select and
-Play/Pause were operator-confirmed from the integrated main remote the same day. Phone-typed
+Play/Pause were operator-confirmed from the integrated main remote the same day (2026-10-04). The
+launchable-app list was fetched from the real Apple TV on 2026-10-05 (36 apps, tvOS 26.6; a data
+request, so no operator action was needed), and the operator then launched **Yle Areena** from that
+list and re-confirmed arrows/OK on the same build. Phone-typed
 text is mirrored to the Apple TV's on-screen keyboard with focus-driven auto-open; that path
 passes the fake peer but is **not** real-device-verified. Wake is not implemented. The main remote's **LG TV / Apple TV**
 switch drives the saved Apple TV; LG behavior is unchanged. The crypto gate never uses the
@@ -247,8 +252,10 @@ same LAN through a temporary, since-deleted JUnit probe, against `Entertainment 
 | Same for Menu | Acknowledged; ~60 ms connect → ack |
 | Physical result | Operator confirmed: TV went to Home, then reacted to Menu |
 
-The two-request session startup is sufficient for HID; `_touchStart`/`TVRCSessionStart`
-were not needed.
+The two-request session startup is sufficient for HID; `_touchStart` was not needed.
+`TVRCSessionStart` is not needed for HID either, but **is** required for tvremoted-backed
+requests: on 2026-10-05 the app list came back silently unanswered until it was added (see
+"Launchable apps" below).
 
 Phone path, same day: debug APK
 `f9ad143c7f7e61d1220d48a939708bdf5546991896e4e4e7e0d9eb24ca545926` installed on the S25
@@ -293,8 +300,8 @@ best-effort on teardown (pyatv `CompanionAPI.disconnect`).
   operation. 1 s teardown timeouts keep `_tiStop`/`_sessionStop` from delaying a disconnect
   on a device that ignores them.
 
-Checks: `./gradlew :app:testDebugUnitTest` with the fake-peer env vars — **26 tests, 0 skipped,
-0 failures**. `CompanionArchiverTest` reads the Python-generated focus archive and asserts our
+Checks: `./gradlew :app:testDebugUnitTest` with the fake-peer env vars — **28 tests, 0 skipped,
+0 failures** (the app-list test below is the 28th). `CompanionArchiverTest` reads the Python-generated focus archive and asserts our
 clear/insert payloads decode back to the same UUID, empty text and full text;
 `CompanionInteropTest.keyboardFocusAndTextMirrorToPeer` drives the fake through `_tiStart`, a
 typed edit and `_tiStopped`/`_tiStarted`, with pyatv's `keyed_archiver` reading our plist back
@@ -305,6 +312,79 @@ regeneration is byte-identical for the existing crypto vectors.
 RTI payload version or rotate the session UUID mid-focus, and the fake only proves
 pinned-pyatv compatibility. Auto-open, the clear+insert round trip and the focus events all
 need a supervised real-device check before this is claimed working.
+
+## Launchable apps — implemented, fake-peer checked
+
+The remote's **Apps** button opens `ui/AppleTvAppsScreen.kt`: the list the Apple TV reports as
+launchable, and one tap asks the TV to open that app. Two requests on the session the remote
+already holds, no new protocol or dependency (pinned pyatv `CompanionAPI.app_list` /
+`launch_app`):
+
+- `FetchLaunchableApplicationsEvent` with `{}`; `_c` is a map of bundle id to the name the TV
+  shows. `CompanionLink.appList()` parses it through the pure `appListFrom`, which drops
+  entries without a usable bundle id, falls back to the id when the TV sends no name, and
+  sorts by name case-insensitively. The filter is ours: the pinned reference returns the map
+  as-is, and a bundle id is what `_launchApp` needs.
+- `_launchApp` with `_bundleID`. pyatv switches to `_urlS` for a URL scheme or `is_url_or_scheme`
+  string; only bundle ids are sent here, so no per-app URL scheme is guessed. An empty id is
+  rejected before the wire, and that rejection closes the link like every other failure.
+- The client keeps the last list in `CompanionClient.apps` and clears nothing on disconnect,
+  so the screen has data to show; it refetches on every open, because the TV reports this only
+  while awake and installed apps change. `KaukosaadinApp` deliberately leaves the Apple session
+  open while this screen is shown (the apps flag is not part of `appleRemoteVisible`).
+- **Session startup needed one more request on real hardware.** `FetchLaunchableApplicationsEvent`
+  was sent on the real Apple TV (tvOS 26.6) and never answered: no response, no `_em`, just the
+  5 s client timeout, with only the three startup replies on the wire
+  (`_systemInfo`, `_sessionStart`, `_tiStart`). The startup now sends
+  `TVRCSessionStart {"ProtocolVersionKey": "1.2"}` between `_sessionStart` and `_tiStart`, as
+  pinned pyatv's `_tv_rc_session_start` does (its comment already notes tvremoted-backed
+  requests like `FetchAttentionState` go unanswered without it); the app list then answered with
+  **36 launchable apps**. A device that rejects that registration, or ignores it, is tolerated
+  with a bounded 2 s wait, because HID presses do not need it and a connect must not stall.
+- Errors reuse the shared `request` path: a rejection shows *"Apple TV rejected the launchApp
+  request."*, never peer text, and a failed fetch or launch closes the session like every other
+  command. Success means the TV acknowledged the request, not that a physical app appeared.
+  Command failures are logged by class and by our own message (`adb logcat -s Kaukosaadin`) —
+  added while diagnosing this, because a silently dropped response was indistinguishable from a
+  decode failure from the UI alone.
+
+Checks: `CompanionCodecTest.appListParsesTheTvReplyAndDropsUnlaunchableEntries` packs a
+reference-shaped reply through the real OPACK codec and asserts the parse, sort and fallback,
+plus rejection of a reply with no `_c`.
+`CompanionInteropTest.appListAndLaunchReachThePeer` drives the fake peer end to end: the parsed
+names come back sorted, `_launchApp` reaches the peer with the expected bundle id, and a blank
+id never leaves the client. `tools/companion_fake_atv.py` sets three synthetic apps
+(`Netflix`, `TV`, `YouTube`) and reports `APPS <n>` / `LAUNCH <bundle>`.
+Full suite with the fake peer: **28 tests, 0 skipped, 0 failures**
+(`./gradlew :app:testDebugUnitTest`, env vars from "Regenerate cross-language vectors"); the
+interop tests now also assert that `TVRCSessionStart` is sent between `_sessionStart` and
+`_tiStart`, matching the reference order.
+`./gradlew :app:ktlintCheck :app:detekt :app:assembleDebug :app:lintDebug :app:assembleRelease`
+passes locally; the apps screen compiles into both APK variants.
+
+Real Apple TV, 2026-10-05 (S25 `R3GL204147Z`, debug APK
+`0f099f047672e45265704fd3b1706f85e17993bece7da570124688d084c235e9`, Apple TV 4K `AppleTV6,2`,
+tvOS 26.6, `Entertainment Room`): **Apps showed "Apple TV reported 36 launchable app(s)"**, with
+real entries including App Store, Arcade, C More, DAZN and discovery+ (`uiautomator` dump of the
+running app; the phone was driven over adb, so this is a data-path check, not an operator visual
+check). Before the `TVRCSessionStart` addition the same tap produced
+*"Unexpected Apple TV reply"* after the 5 s timeout, with `adb logcat -s Kaukosaadin` printing
+`Apple TV operation failed: ProtocolException: Apple TV did not answer the
+FetchLaunchableApplicationsEvent request.`
+
+The operator then tapped **Yle Areena** in that list: the TV opened it, and the app reported
+`Yle Areena launch acknowledged by Apple TV; on-screen result NOT confirmed.` Arrows and OK were
+re-confirmed on the same build, so the added `TVRCSessionStart` did not disturb the HID path that
+was verified before it. `_launchApp` is acknowledged by this tvOS version, so no
+fire-and-forget fallback is needed.
+
+**Not verified:** "acknowledged" remains weaker than the operator's eyesight — some entries may
+open a store page or an app's own home screen rather than content. The failure paths (revoked
+pairing, TV asleep mid-browse, a launch the TV ignores) have only been exercised against the fake
+peer, and the list contents and length on other tvOS versions are unknown.
+`tools/check_remote_layout.py` has not been re-run since the Apps button was added to the Apple TV
+status row; it compares anchor bounds across the LG / Apple TV toggle and needs a device with both
+TVs saved.
 
 ## Remaining proof sequence after the on-device gate
 
@@ -352,4 +432,6 @@ The client is now integrated into the main remote (see above). Remaining before 
 GOO-27: the supervised hardware evidence in step 6 (restart reconnect,
 forget/re-pair, revoked pairing, network failure) from the integrated remote, plus wake.
 Text input additionally needs a supervised real-device check: focus auto-open, typing,
-backspace/paste and dismissal on tvOS 26.6.
+backspace/paste and dismissal on tvOS 26.6. The apps list has its own section: fetch and launch
+are now operator-confirmed on the real Apple TV; its failure paths and the device layout check
+are what remain.

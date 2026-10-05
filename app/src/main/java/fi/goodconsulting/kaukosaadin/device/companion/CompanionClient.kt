@@ -5,6 +5,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -64,6 +65,11 @@ class CompanionClient(
     /** Non-null while the TV's on-screen keyboard is focused; the UI mirrors typed text to it. */
     val keyboard = mutableKeyboard.asStateFlow()
 
+    private val mutableApps = MutableStateFlow(emptyList<AppleTvApp>())
+
+    /** Last app list the TV reported; empty until [appList] succeeds. A snapshot, not a fixed set. */
+    val apps = mutableApps.asStateFlow()
+
     @Volatile private var pendingPin: Channel<String>? = null
     val name get() = prefs.getString("name", "")!!
 
@@ -84,6 +90,8 @@ class CompanionClient(
                         throw e
                     } catch (e: Exception) {
                         closeSession()
+                        // Our own failure text only (see CompanionLink); never peer text, keys or secrets.
+                        Log.w(LOG_TAG, "Apple TV operation failed: ${e.javaClass.simpleName}: ${e.message}")
                         // Messages are ours (see CompanionLink); never peer text, keys or raw exception detail.
                         Result(
                             false,
@@ -187,6 +195,21 @@ class CompanionClient(
             }
         Result(true, "$label acknowledged by Apple TV; on-screen result NOT confirmed.")
     }
+
+    /** Refresh the launchable-app list; the TV reports it only while awake and connected. */
+    suspend fun appList() =
+        operation {
+            val apps = session().appList()
+            mutableApps.value = apps
+            Result(true, "Apple TV reported ${apps.size} launchable app(s).")
+        }
+
+    /** Ask the TV to open one app; it lands on the app's own home screen, not specific content. */
+    suspend fun launchApp(app: AppleTvApp) =
+        operation {
+            session().launchApp(app.bundleId)
+            Result(true, "${app.name} launch acknowledged by Apple TV; on-screen result NOT confirmed.")
+        }
 
     /** Mirror the phone's text field to the TV; waits for the lock instead of dropping edits. */
     @Suppress("TooGenericExceptionCaught") // Any link failure must close the session, never leave it half-open.
@@ -312,6 +335,9 @@ class CompanionClient(
 
     companion object {
         const val DISPLAY_NAME = "Kaukosaadin"
+
+        /** Field diagnostics only: our own failure text, never peer data or secrets. */
+        private const val LOG_TAG = "Kaukosaadin"
         private const val KEY_ALIAS = "companion-pairing"
         private const val TEXT_FAILED = "Apple TV could not take the text. Reconnect and try again."
         private const val TEXT_UNREACHABLE = "Apple TV unreachable while sending text. Reconnect and try again."

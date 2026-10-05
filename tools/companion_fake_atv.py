@@ -2,8 +2,9 @@
 """Host-only interop peer: pinned pyatv's fake Companion Apple TV on 127.0.0.1.
 
 Usage (same venv as generate_companion_vectors.py): companion_fake_atv.py <pyatv checkout>
-Prints "PORT <n>", then "PAIRED", "SESSION <srvT>" and "BUTTON <name>" as the client acts.
-The fake's PIN is 1111. Exits when stdin closes. No real device or LAN traffic.
+Prints "PORT <n>", then "PAIRED", "SESSION <srvT>", "TVRC_SESSION", "BUTTON <name>", "APPS <n>"
+and "LAUNCH <bundle>" as the client acts. The fake's PIN is 1111. Exits when stdin closes.
+No real device or LAN traffic.
 """
 import asyncio
 from pathlib import Path
@@ -82,6 +83,10 @@ class ReportingService(FakeCompanionService):
         super().handle__sessionstart(message)
         report(f"SESSION {self.state.service_type}")
 
+    def handle_tvrcsessionstart(self, message):
+        super().handle_tvrcsessionstart(message)
+        report("TVRC_SESSION")
+
     def handle__hidc(self, message):
         self.state.latest_button = None
         super().handle__hidc(message)
@@ -97,6 +102,14 @@ class ReportingService(FakeCompanionService):
         super().handle__tic(message)
         if message["_t"] == 1:
             report(f"TEXT {self.state.rti_text}")
+
+    def handle_fetchlaunchableapplicationsevent(self, message):
+        super().handle_fetchlaunchableapplicationsevent(message)
+        report(f"APPS {len(self.state.installed_apps)}")
+
+    def handle__launchapp(self, message):
+        super().handle__launchapp(message)
+        report(f"LAUNCH {self.state.active_app or self.state.open_url}")
 
 
 async def read_commands(usecases):
@@ -118,6 +131,12 @@ async def read_commands(usecases):
 async def main():
     state = FakeCompanionState()
     usecases = FakeCompanionUseCases(state)
+    # Fixed, synthetic bundle ids: what a real Apple TV would report is its own business.
+    usecases.set_installed_apps({
+        "com.netflix.Netflix": "Netflix",
+        "com.google.ios.youtube": "YouTube",
+        "com.apple.TV": "TV",
+    })
     loop = asyncio.get_running_loop()
     server = await loop.create_server(lambda: ReportingService(state), "127.0.0.1", 0)
     report(f"PORT {server.sockets[0].getsockname()[1]}")

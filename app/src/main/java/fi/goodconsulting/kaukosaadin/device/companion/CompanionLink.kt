@@ -3,6 +3,7 @@
 
 package fi.goodconsulting.kaukosaadin.device.companion
 
+import android.util.Log
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -17,6 +18,9 @@ import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+
+/** Field diagnostics only: our own failure text, never peer data or secrets. */
+private const val LOG_TAG = "Kaukosaadin"
 
 /** Apple TV remote buttons; codes from pinned pyatv protocols/companion/api.py HidCommand. */
 enum class HidCommand(
@@ -34,6 +38,12 @@ enum class HidCommand(
 
 /** pyatv InputAction: double tap = two press/release pairs on one connection; hold = 1 s down. */
 enum class PressAction { Tap, DoubleTap, Hold }
+
+/** One app the TV reports as launchable, with the name it shows on its own Home screen. */
+data class AppleTvApp(
+    val bundleId: String,
+    val name: String,
+)
 
 /** tvOS on-screen keyboard focus pushed by the RTI service (`_tiStarted`/`_tiStopped`). */
 data class CompanionKeyboardState(
@@ -274,6 +284,17 @@ internal class CompanionLink(
         remoteSid =
             (content?.get("_sid") as? Long)?.takeIf { it in 0..0xFFFFFFFFL }
                 ?: throw ProtocolException("TV did not start a remote session.")
+        // tvOS answers tvremoted-backed requests (app list, attention state) only after a TV Remote
+        // Client session is registered (pinned pyatv `_tv_rc_session_start`). A device without the
+        // service answers with an error, or with nothing at all; HID presses do not need it, so both
+        // are tolerated here — while a dead link still fails the requests that follow.
+        try {
+            request("TVRCSessionStart", linkedMapOf("ProtocolVersionKey" to "1.2"), RC_SESSION_TIMEOUT_MS)
+        } catch (_: CompanionRejected) {
+            // Not supported on this device.
+        } catch (_: ProtocolException) {
+            // No answer within the bounded wait; keep the verified session usable.
+        }
         // Register the RTI text client so tvOS pushes keyboard-focus events. A device without the
         // service answers with an error; navigation still works, so only that clean failure is ignored.
         try {
@@ -367,6 +388,21 @@ internal class CompanionLink(
         send(E_OPACK, Opack.pack(linkedMapOf("_i" to identifier, "_t" to EVENT, "_c" to content, "_x" to xid++)))
     }
 
+    /** Launchable apps the TV reports; a snapshot from the TV, not a fixed set. */
+    fun appList(): List<AppleTvApp> =
+        guarded {
+            check(remoteSid >= 0) { "Session not started." }
+            appListFrom(request("FetchLaunchableApplicationsEvent", emptyMap()))
+        }
+
+    /** Open one app by bundle id (pyatv also takes a URL scheme via `_urlS`; not used here). */
+    fun launchApp(bundleId: String) =
+        guarded {
+            check(remoteSid >= 0) { "Session not started." }
+            require(bundleId.isNotBlank()) { "No app selected." }
+            request("_launchApp", linkedMapOf("_bundleID" to bundleId))
+        }
+
     /** Replace the tvOS keyboard text from the focused RTI session: clear, then insert. */
     fun typeText(text: String) =
         guarded {
@@ -406,6 +442,9 @@ internal class CompanionLink(
                     }
                 }
             }
+        }.onFailure { failure ->
+            // A swallowed decode/framing failure looks like a plain close to callers, so say why.
+            if (!closed) Log.w(LOG_TAG, "Companion reader stopped: ${failure.javaClass.simpleName}: ${failure.message}")
         }
         runCatching { close() }
     }
@@ -517,6 +556,9 @@ internal class CompanionLink(
         private const val SERVICE = "com.apple.tvremoteservices"
         private const val HOLD_MS = 1000L // pyatv _press_button default delay
         private const val TIMEOUT_MS = 5_000L
+
+        /** The TV RC session registration is optional; do not stall a connect that ignores it. */
+        private const val RC_SESSION_TIMEOUT_MS = 2_000L
         private const val TEARDOWN_TIMEOUT_MS = 1_000L
         private const val TIMEOUT_NS = 5_000_000_000L
         private val PS_MSG05 = "PS-Msg05".toByteArray(Charsets.US_ASCII)
@@ -572,6 +614,19 @@ internal class CompanionLink(
             else -> "Apple TV rejected pairing (code $code)."
         }
     }
+}
+
+/**
+ * Maps a `FetchLaunchableApplicationsEvent` reply to sorted apps: `_c` is bundle id to displayed name.
+ * An entry without a usable id cannot be launched and is dropped; a missing name falls back to the id.
+ */
+internal fun appListFrom(reply: Map<*, *>): List<AppleTvApp> {
+    val content = reply["_c"] as? Map<*, *> ?: throw ProtocolException("Apple TV did not return an app list.")
+    return content.entries
+        .mapNotNull { (id, name) ->
+            val bundleId = (id as? String)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            AppleTvApp(bundleId, (name as? String)?.takeIf { it.isNotBlank() } ?: bundleId)
+        }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, AppleTvApp::name))
 }
 
 /** Reads exactly [count] bytes, keeping the socket timeout inside [deadline]; fails on close or timeout. */

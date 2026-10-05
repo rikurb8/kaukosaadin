@@ -113,6 +113,7 @@ fun KaukosaadinApp() {
     var generalSettings by rememberSaveable { mutableStateOf(false) }
     var lgSettings by remember { mutableStateOf(false) }
     var appleSettings by remember { mutableStateOf(false) }
+    var appleApps by remember { mutableStateOf(false) }
     var selected by rememberSaveable { mutableStateOf(Target.Lg) }
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<LgClient.Result?>(null) }
@@ -139,6 +140,7 @@ fun KaukosaadinApp() {
         }
 
     val activity = LocalActivity.current
+    // The Apple session stays open while the apps screen is shown: it needs the TV to list and launch.
     val appleRemoteVisible = target == Target.AppleTv && applePaired && !generalSettings && !lgSettings && !appleSettings
     val remoteVisible by rememberUpdatedState(appleRemoteVisible)
     LaunchedEffect(activity) {
@@ -205,6 +207,8 @@ fun KaukosaadinApp() {
                 AppleTvSetupScreen(innerPadding, apple, discovery) {
                     appleSettings = false
                 }
+            } else if (appleApps) {
+                AppleTvAppsScreen(innerPadding, apple) { appleApps = false }
             } else if (!lgSaved && !applePaired) {
                 EmptyRemoteScreen(innerPadding, onAdd = ::openSettings, onGeneralSettings = { generalSettings = true })
             } else if (target == Target.Lg) {
@@ -226,6 +230,7 @@ fun KaukosaadinApp() {
                         }
                     },
                     onSettings = { lgSettings = true },
+                    onApps = null,
                     onGeneralSettings = { generalSettings = true },
                     onWake = { run { result = client.send(LgProtocol.Action.Wake) } },
                     onKey = { key, _ -> key.lg?.let { action -> run { result = client.send(action) } } },
@@ -242,6 +247,7 @@ fun KaukosaadinApp() {
                     status = appleStatus.message,
                     onTarget = { if (it == Target.AppleTv || lgSaved) selected = it else openSettings(it) },
                     onConnect = null,
+                    onApps = { appleApps = true },
                     onSettings = { appleSettings = true },
                     onGeneralSettings = { generalSettings = true },
                     onWake = {},

@@ -89,6 +89,30 @@ class CompanionCodecTest {
         assertThrows(ProtocolException::class.java) { Tlv8.read(byteArrayOf(6)) }
     }
 
+    @Test fun appListParsesTheTvReplyAndDropsUnlaunchableEntries() {
+        // Shape the TV sends: a _c map of bundle id to displayed name, packed through the real codec.
+        val reply =
+            Opack.unpack(
+                Opack.pack(
+                    mapOf(
+                        "_t" to 3,
+                        "_c" to
+                            mapOf(
+                                "com.netflix.Netflix" to "Netflix",
+                                "com.google.ios.youtube" to "YouTube",
+                                "" to "No bundle",
+                                "com.x" to 7,
+                            ),
+                    ),
+                ),
+            ) as Map<*, *>
+        assertEquals(
+            listOf("com.x" to "com.x", "Netflix" to "com.netflix.Netflix", "YouTube" to "com.google.ios.youtube"),
+            appListFrom(reply).map { it.name to it.bundleId },
+        )
+        assertThrows(ProtocolException::class.java) { appListFrom(mapOf("_t" to 3L)) }
+    }
+
     // Decoded integers are Long and bytes are arrays; compare structurally.
     private fun normalize(value: Any?): Any? =
         when (value) {

@@ -61,6 +61,7 @@ class CompanionInteropTest {
             assertEquals("VERIFIED", next())
             link.startSession(info, credentials)
             assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TVRC_SESSION", next())
             assertEquals("TEXT_SESSION", next())
             // One verified session handles successive presses, including a pause between them.
             for (command in listOf(HidCommand.Menu, HidCommand.Home, HidCommand.Menu)) {
@@ -79,6 +80,7 @@ class CompanionInteropTest {
                 assertEquals("VERIFIED", next())
                 link.startSession(info, credentials)
                 assertEquals("SESSION com.apple.tvremoteservices", next())
+                assertEquals("TVRC_SESSION", next())
                 assertEquals("TEXT_SESSION", next())
                 val started = System.nanoTime()
                 link.press(HidCommand.Home, action)
@@ -121,6 +123,29 @@ class CompanionInteropTest {
         assertEquals("VERIFY_REJECTED", next())
     }
 
+    @Test fun appListAndLaunchReachThePeer() {
+        val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
+        assertEquals("PAIRED", next())
+        open().use { link ->
+            link.verify(credentials)
+            assertEquals("VERIFIED", next())
+            link.startSession(info, credentials)
+            assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TVRC_SESSION", next())
+            assertEquals("TEXT_SESSION", next())
+            // pyatv's fake reports three fixed apps; the client sorts them by displayed name.
+            assertEquals(
+                listOf("Netflix", "TV", "YouTube"),
+                link.appList().map { it.name },
+            )
+            assertEquals("APPS 3", next())
+            link.launchApp("com.google.ios.youtube")
+            assertEquals("LAUNCH com.google.ios.youtube", next())
+            // A blank id is rejected before it reaches the wire; that failure also drops the link by design.
+            assertThrows(IllegalArgumentException::class.java) { link.launchApp("  ") }
+        }
+    }
+
     @Test fun keyboardFocusAndTextMirrorToPeer() {
         val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
         assertEquals("PAIRED", next())
@@ -131,6 +156,7 @@ class CompanionInteropTest {
             assertEquals("VERIFIED", next())
             link.startSession(info, credentials)
             assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TVRC_SESSION", next())
             assertEquals("TEXT_SESSION", next())
             // tvOS reports focus in the _tiStart reply when the keyboard is already up.
             assertEquals(CompanionKeyboardState(true, "Fake Companion Keyboard Text"), keyboard.poll(5, TimeUnit.SECONDS))

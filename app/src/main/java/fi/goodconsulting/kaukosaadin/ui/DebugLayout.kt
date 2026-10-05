@@ -45,6 +45,7 @@ internal fun DebugRemoteScreen(
     navigationEnabled: Boolean,
     onTarget: (Target) -> Unit,
     onConnect: (() -> Unit)?,
+    onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onGeneralSettings: () -> Unit,
     onWake: () -> Unit,
@@ -88,6 +89,7 @@ internal fun DebugRemoteScreen(
                 TextButton(onClick = onSettings, enabled = !busy) { Text("TV settings") }
             } else {
                 TextButton(onClick = onSettings, enabled = !busy) { Text("Apple TV settings") }
+                if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
