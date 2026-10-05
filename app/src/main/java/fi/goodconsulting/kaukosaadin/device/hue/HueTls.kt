@@ -14,8 +14,7 @@ import javax.net.ssl.X509TrustManager
 
 /**
  * The verified HTTPS transport for one bridge. It is the seam ticket #8 builds its API client on:
- * [configure] returns an OkHttp builder that trusts [host] and speaks HTTPS only, and [client] is the
- * setup call's short-timeout client.
+ * [configure] returns an OkHttp builder that trusts [host] and speaks HTTPS only.
  *
  * There is no trust-all path. The platform trust manager runs first; only its rejection of the
  * bridge's self-signed certificate reaches the trust-on-first-use pin in [HueTrustManager].
@@ -42,9 +41,6 @@ internal class HueTls(
             .followRedirects(false)
             .followSslRedirects(false)
     }
-
-    /** The setup client: [configure] with a short timeout, built once per operation. */
-    fun client(host: String): OkHttpClient = configure(host).build()
 
     /**
      * A CA-signed bridge certificate must also match the address, so ordinary HTTPS verification
