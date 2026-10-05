@@ -157,6 +157,14 @@ Maestro cannot dismiss a secure lock screen.
 ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 ```
 
+Style and static analysis (`ktlintCheck` and `detekt` also run as part of `./gradlew check`).
+Existing violations are grandfathered in `config/*/baseline.xml`; regenerate after intentional
+cleanup with `./gradlew :app:ktlintGenerateBaseline :app:detektBaseline`.
+
+```bash
+./gradlew :app:ktlintCheck :app:detekt
+```
+
 GOO-26 uses OkHttp for Android WebSockets and platform Android Keystore for pairing.
 The upstream lgtv-kotlin SSDP scanner is copied with attribution and small Android/safety
 fixes; no additional dependency or discovery stack. Sleeping TVs retain saved setup and
