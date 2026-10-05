@@ -78,7 +78,10 @@ fun AddDeviceScreen(
     ) {
         Text("Add device", style = MaterialTheme.typography.titleLarge)
         TextButton(onClick = onBack) { Text("Done") }
-        Text("Finds LG webOS TVs, Apple TVs and Hue Bridges on your Wi-Fi. Pair a TV with the PIN it shows, or a bridge with its link button.")
+        Text(
+            "Finds LG webOS TVs, Apple TVs and Hue Bridges on your Wi-Fi. " +
+                "Pair a TV with the PIN it shows, or a bridge with its link button.",
+        )
         Button(enabled = scans == 0, onClick = { scanToken++ }) { Text(if (scans > 0) "Scanning…" else "Scan again") }
         if (message.isNotEmpty()) Text(message)
         DeviceIntegrations.all.forEach { it.Setup(host) }
