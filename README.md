@@ -166,8 +166,16 @@ Maestro cannot dismiss a secure lock screen.
 ```
 
 Style and static analysis (`ktlintCheck` and `detekt` also run as part of `./gradlew check`).
-Existing violations are grandfathered in `config/*/baseline.xml`; regenerate after intentional
-cleanup with `./gradlew :app:ktlintGenerateBaseline :app:detektBaseline`.
+
+Fix a finding by changing the code. If a rule genuinely does not apply, suppress it at the
+narrowest scope with a reason on the line above, instead of adding a baseline entry:
+
+- detekt: `@Suppress("RuleName")` on a file (`@file:`), class, function, statement, or expression.
+- ktlint: `@Suppress("ktlint:<ruleset>:<rule-id>")`, e.g. `ktlint:standard:max-line-length`.
+  `// ktlint-disable` comments are deprecated by this ktlint version and no longer suppress.
+
+`config/*/baseline.xml` is gone: neither linter has a baseline, so every finding fails the build and
+the only way to land an exception is an inline `@Suppress` with a reason on the line above it.
 
 ```bash
 ./gradlew :app:ktlintCheck :app:detekt

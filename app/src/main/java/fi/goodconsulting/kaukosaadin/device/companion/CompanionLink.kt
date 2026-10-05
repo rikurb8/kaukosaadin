@@ -1,3 +1,6 @@
+// pyatv Companion/HID wire format: command codes, frame sizes, masks and protocol timeouts.
+@file:Suppress("MagicNumber")
+
 package fi.goodconsulting.kaukosaadin.device.companion
 
 import java.io.Closeable
@@ -45,6 +48,8 @@ internal class CompanionCredentials(
     fun wipe() = ltsk.fill(0)
 
     companion object {
+        // Wire order is pyatv's ltpk:ltsk:atv_id:client_id; the 4-way destructuring keeps that mapping readable.
+        @Suppress("DestructuringDeclarationWithTooManyEntries")
         fun decode(value: String): CompanionCredentials {
             val parts = value.split(":")
             require(parts.size == 4 && parts.all { it.length % 2 == 0 && it.all(Char::isLetterOrDigit) }) { "Invalid saved pairing." }
@@ -90,7 +95,9 @@ internal class CompanionLink(
     private var localSid = 0L
     private var remoteSid = -1L
 
-    @Volatile private var closed = false
+    @Volatile
+    internal var closed = false
+        private set
 
     class PendingPairing internal constructor(
         internal val salt: ByteArray,
@@ -298,6 +305,8 @@ internal class CompanionLink(
         throw ProtocolException("Apple TV did not answer the ${identifier.trimStart('_')} request.")
     }
 
+    // A strict handshake validates every frame; each malformed reply keeps its own message.
+    @Suppress("ThrowsCount")
     private fun exchangeAuth(
         type: Int,
         pairingData: ByteArray,
@@ -341,39 +350,12 @@ internal class CompanionLink(
     }
 
     private fun receive(deadline: Long): Pair<Int, ByteArray> {
-        val header = readFully(4, deadline)
+        val header = readFully(input, socket, 4, deadline)
         val length = ((header[1].toInt() and 0xFF) shl 16) or ((header[2].toInt() and 0xFF) shl 8) or (header[3].toInt() and 0xFF)
         if (length > MAX_FRAME) throw ProtocolException("Apple TV message too large.")
-        val payload = readFully(length, deadline)
+        val payload = readFully(input, socket, length, deadline)
         val crypto = session
         return (header[0].toInt() and 0xFF) to if (crypto != null && length > 0) crypto.decrypt(payload, header) else payload
-    }
-
-    private fun readFully(
-        count: Int,
-        deadline: Long,
-    ): ByteArray {
-        val buffer = ByteArray(count)
-        var read = 0
-        while (read < count) {
-            val remaining = (deadline - System.nanoTime()) / 1_000_000
-            if (remaining <= 0) throw SocketTimeoutException("Apple TV timed out.")
-            socket?.soTimeout = remaining.toInt().coerceAtLeast(1)
-            val n = input.read(buffer, read, count - read)
-            if (n < 0) throw IOException("Apple TV closed the connection.")
-            read += n
-        }
-        return buffer
-    }
-
-    private inline fun <T> guarded(block: () -> T): T {
-        check(!closed) { "Connection closed. Reconnect before sending." }
-        try {
-            return block()
-        } catch (e: Exception) {
-            close()
-            throw e
-        }
     }
 
     override fun close() {
@@ -401,12 +383,14 @@ internal class CompanionLink(
         private const val MAX_FRAMES = 64
         private const val SERVICE = "com.apple.tvremoteservices"
         private const val HOLD_MS = 1000L // pyatv _press_button default delay
-        private val TIMEOUT_NS = 5_000_000_000L
+        private const val TIMEOUT_NS = 5_000_000_000L
         private val PS_MSG05 = "PS-Msg05".toByteArray(Charsets.US_ASCII)
         private val PS_MSG06 = "PS-Msg06".toByteArray(Charsets.US_ASCII)
         private val PV_MSG02 = "PV-Msg02".toByteArray(Charsets.US_ASCII)
         private val PV_MSG03 = "PV-Msg03".toByteArray(Charsets.US_ASCII)
 
+        // Close the half-open socket if connect or the link hand-off fails, then rethrow.
+        @Suppress("TooGenericExceptionCaught")
         fun open(
             address: InetAddress,
             port: Int,
@@ -452,5 +436,37 @@ internal class CompanionLink(
             7 -> "Apple TV is busy. Retry in a moment."
             else -> "Apple TV rejected pairing (code $code)."
         }
+    }
+}
+
+/** Reads exactly [count] bytes, keeping the socket timeout inside [deadline]; fails on close or timeout. */
+private fun readFully(
+    input: InputStream,
+    socket: Socket?,
+    count: Int,
+    deadline: Long,
+): ByteArray {
+    val buffer = ByteArray(count)
+    var read = 0
+    while (read < count) {
+        val remaining = (deadline - System.nanoTime()) / 1_000_000
+        if (remaining <= 0) throw SocketTimeoutException("Apple TV timed out.")
+        socket?.soTimeout = remaining.toInt().coerceAtLeast(1)
+        val n = input.read(buffer, read, count - read)
+        if (n < 0) throw IOException("Apple TV closed the connection.")
+        read += n
+    }
+    return buffer
+}
+
+// A failed frame desyncs the byte stream, so any failure closes the link before rethrowing.
+@Suppress("TooGenericExceptionCaught")
+private inline fun <T> CompanionLink.guarded(block: () -> T): T {
+    check(!closed) { "Connection closed. Reconnect before sending." }
+    return try {
+        block()
+    } catch (e: Exception) {
+        close()
+        throw e
     }
 }

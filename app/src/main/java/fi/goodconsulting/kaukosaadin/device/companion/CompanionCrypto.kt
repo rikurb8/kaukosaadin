@@ -1,3 +1,6 @@
+// SRP/AES/HKDF sizes (keys, nonces, salts, digests) are HAP spec constants, not tunables.
+@file:Suppress("MagicNumber")
+
 package fi.goodconsulting.kaukosaadin.device.companion
 
 import org.bouncycastle.crypto.agreement.srp.SRP6Client
@@ -195,6 +198,8 @@ internal object CompanionCrypto {
             header: ByteArray,
         ): ByteArray = crypt(false, message, header)
 
+        // Any failure must close the session (wiping its keys) before the exception propagates.
+        @Suppress("TooGenericExceptionCaught")
         private fun crypt(
             encrypt: Boolean,
             message: ByteArray,

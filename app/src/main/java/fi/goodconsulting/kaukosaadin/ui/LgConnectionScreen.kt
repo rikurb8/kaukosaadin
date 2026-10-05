@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.lgtvremote.discovery.TVDiscovery
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
 import kotlinx.coroutines.launch
@@ -76,6 +77,8 @@ fun LgPinDialog(client: LgClient) {
     }
 }
 
+// Certificate approval, address-change resets and pairing gates stay together; split state only if the flow changes.
+@Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
 fun LgConnectionScreen(
     padding: PaddingValues,
@@ -87,7 +90,6 @@ fun LgConnectionScreen(
     val devices by client.devices.collectAsState()
     val ready by client.ready.collectAsState()
     BackHandler(onBack = onBack)
-    var manualAddress by remember { mutableStateOf(false) }
     var host by remember { mutableStateOf(client.host) }
     var name by remember { mutableStateOf(client.name) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -124,17 +126,12 @@ fun LgConnectionScreen(
             mac == client.mac &&
             broadcast == client.broadcast
     if (confirmRemove) {
-        AlertDialog(
-            onDismissRequest = { confirmRemove = false },
-            title = { Text("Remove TV?") },
-            text = { Text("This removes the saved TV, pairing and wake settings. You'll need to add and pair it again.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmRemove = false
-                    run { client.remove().also { if (it.ok) onBack() } }
-                }) { Text("Remove") }
+        RemoveLgDialog(
+            onDismiss = { confirmRemove = false },
+            onConfirm = {
+                confirmRemove = false
+                run { client.remove().also { if (it.ok) onBack() } }
             },
-            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
         )
     }
     Column(
@@ -150,8 +147,11 @@ fun LgConnectionScreen(
         Text("Supports LG webOS TVs on a trusted home LAN. Wake only — no power-off.")
         Button(enabled = !busy, onClick = { run { client.discover() } }) { Text("Find LG TVs") }
         Text((if (busy) status else result ?: status).message)
-        devices.forEach { tv ->
-            OutlinedButton(enabled = !busy, onClick = {
+        LgDeviceSelection(
+            devices = devices,
+            host = host,
+            enabled = !busy,
+            onPick = { tv ->
                 if (host != tv.ip) {
                     host = tv.ip
                     mac = ""
@@ -160,21 +160,16 @@ fun LgConnectionScreen(
                     approved = false
                 }
                 name = if (tv.name == tv.ip) "LG TV" else tv.name
-            }) { Text("${tv.name} · ${tv.ip}") }
-        }
-        Text("Selected TV: ${host.ifEmpty { "none" }}")
-        Text("Sleeping TVs may not reply. Saved setup is retained; discovery never pairs automatically.")
-        TextButton(enabled = !busy, onClick = { manualAddress = !manualAddress }) { Text("Manual address fallback") }
-        if (manualAddress) {
-            OutlinedTextField(host, {
+            },
+            onAddress = {
                 host = it
                 name = "LG TV"
                 mac = ""
                 broadcast = ""
                 approved = false
                 fingerprint = ""
-            }, label = { Text("TV IPv4 address") }, enabled = !busy)
-        }
+            },
+        )
         if (host.isNotEmpty()) {
             OutlinedTextField(name, { name = it }, label = { Text("TV name") }, enabled = !busy, singleLine = true)
             Text("Discovery provides a display name, not proof of identity. Rename it if you like.")
@@ -236,5 +231,39 @@ fun LgConnectionScreen(
             TextButton(enabled = !busy, onClick = { confirmRemove = true }) { Text("Remove TV") }
         }
         TextButton(onClick = onBack) { Text("Done") }
+    }
+}
+
+@Composable
+private fun RemoveLgDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove TV?") },
+        text = { Text("This removes the saved TV, pairing and wake settings. You'll need to add and pair it again.") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun LgDeviceSelection(
+    devices: List<TVDiscovery.DiscoveredTV>,
+    host: String,
+    enabled: Boolean,
+    onPick: (TVDiscovery.DiscoveredTV) -> Unit,
+    onAddress: (String) -> Unit,
+) {
+    var manualAddress by remember { mutableStateOf(false) }
+    devices.forEach { tv ->
+        OutlinedButton(enabled = enabled, onClick = { onPick(tv) }) { Text("${tv.name} · ${tv.ip}") }
+    }
+    Text("Selected TV: ${host.ifEmpty { "none" }}")
+    Text("Sleeping TVs may not reply. Saved setup is retained; discovery never pairs automatically.")
+    TextButton(enabled = enabled, onClick = { manualAddress = !manualAddress }) { Text("Manual address fallback") }
+    if (manualAddress) {
+        OutlinedTextField(host, onAddress, label = { Text("TV IPv4 address") }, enabled = enabled)
     }
 }

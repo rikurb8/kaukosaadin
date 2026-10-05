@@ -17,8 +17,10 @@ class TVDiscovery {
     )
 
     /** Upstream SSDP multicast/broadcast scan; no HTTP enrichment or pairing. */
-    fun scanNetwork(timeoutMs: Int = 6000): List<DiscoveredTV> {
-        require(timeoutMs in 250..15000) { "Discovery timeout must be 250–15000 ms." }
+    fun scanNetwork(timeoutMs: Int = DEFAULT_TIMEOUT_MS): List<DiscoveredTV> {
+        require(timeoutMs in MIN_TIMEOUT_MS..MAX_TIMEOUT_MS) {
+            "Discovery timeout must be $MIN_TIMEOUT_MS–$MAX_TIMEOUT_MS ms."
+        }
         val mSearch =
             buildString {
                 append("M-SEARCH * HTTP/1.1\r\n")
@@ -39,7 +41,7 @@ class TVDiscovery {
             socket.broadcast = true
             socket.timeToLive = 1
             val start = System.nanoTime()
-            repeat(3) { round ->
+            repeat(SEARCH_ROUNDS) { round ->
                 var sent = false
                 var sendError: java.io.IOException? = null
                 for (destination in destinations) {
@@ -51,17 +53,14 @@ class TVDiscovery {
                     }
                 }
                 if (!sent) throw sendError ?: java.io.IOException("Discovery send failed")
-                val end = start + TimeUnit.MILLISECONDS.toNanos(timeoutMs.toLong()) * (round + 1) / 3
+                val end = start + TimeUnit.MILLISECONDS.toNanos(timeoutMs.toLong()) * (round + 1) / SEARCH_ROUNDS
                 while (System.nanoTime() < end) {
                     val remaining = TimeUnit.NANOSECONDS.toMillis(end - System.nanoTime())
-                    socket.soTimeout = remaining.coerceIn(1, 2000).toInt()
+                    socket.soTimeout = remaining.coerceIn(1, RECEIVE_TIMEOUT_MS).toInt()
                     try {
-                        val packet = DatagramPacket(ByteArray(4096), 4096)
+                        val packet = DatagramPacket(ByteArray(MAX_RESPONSE_BYTES), MAX_RESPONSE_BYTES)
                         socket.receive(packet)
-                        val ip = packet.address.hostAddress ?: continue
-                        if (ip in devices) continue
-                        val response = String(packet.data, 0, packet.length, Charsets.UTF_8)
-                        parseResponse(response, ip)?.let { devices[ip] = it }
+                        absorb(packet, devices)
                     } catch (_: SocketTimeoutException) {
                         break
                     }
@@ -72,22 +71,43 @@ class TVDiscovery {
     }
 
     companion object {
+        private const val DEFAULT_TIMEOUT_MS = 6000
+        private const val MIN_TIMEOUT_MS = 250
+        private const val MAX_TIMEOUT_MS = 15_000
+        private const val RECEIVE_TIMEOUT_MS = 2000L
+        private const val SEARCH_ROUNDS = 3
+        private const val MAX_RESPONSE_BYTES = 4096
+        private const val MAX_NAME_CHARS = 160
         private const val SEARCH_TARGET = "urn:lge-com:service:webos-second-screen:1"
+
+        /** Records the first reply per address; replies we cannot attribute or have already seen are dropped. */
+        private fun absorb(
+            packet: DatagramPacket,
+            devices: MutableMap<String, DiscoveredTV>,
+        ) {
+            val ip = packet.address.hostAddress ?: return
+            if (ip in devices) return
+            val response = String(packet.data, 0, packet.length, Charsets.UTF_8)
+            parseResponse(response, ip)?.let { devices[ip] = it }
+        }
 
         /** Extracted upstream response parser, tightened at the untrusted LAN boundary. */
         internal fun parseResponse(
             response: String,
             ip: String,
         ): DiscoveredTV? {
-            if (response.length > 4096) return null
             val lines = response.split("\r\n")
-            if (!lines.first().trim().equals("HTTP/1.1 200 OK", ignoreCase = true)) return null
             val service =
                 lines
                     .firstOrNull { it.startsWith("st:", ignoreCase = true) }
                     ?.substringAfter(':')
                     ?.trim()
-            if (!SEARCH_TARGET.equals(service, ignoreCase = true)) return null
+            if (response.length > MAX_RESPONSE_BYTES ||
+                !lines.first().trim().equals("HTTP/1.1 200 OK", ignoreCase = true) ||
+                !SEARCH_TARGET.equals(service, ignoreCase = true)
+            ) {
+                return null
+            }
             var name = ip
             var location: String? = null
             for (line in lines) {
@@ -100,7 +120,7 @@ class TVDiscovery {
                             } catch (_: IllegalArgumentException) {
                                 rawName
                             }
-                        name = name.filterNot { it.isISOControl() }.take(160).ifBlank { ip }
+                        name = name.filterNot { it.isISOControl() }.take(MAX_NAME_CHARS).ifBlank { ip }
                     }
                     line.startsWith("location:", ignoreCase = true) -> location = line.substringAfter(':').trim()
                 }

@@ -58,6 +58,8 @@ class CompanionClient(
     @Volatile private var pendingPin: Channel<String>? = null
     val name get() = prefs.getString("name", "")!!
 
+    // Boundary for every Apple TV command: unknown failures become a status message, never peer text.
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun operation(block: suspend () -> Result): Result =
         withContext(Dispatchers.IO) {
             if (!lock.tryLock()) return@withContext Result(false, "Apple TV busy; press not queued. Try again after completion.")
@@ -166,7 +168,7 @@ class CompanionClient(
         mutableAwaitingPin.value = true
         mutableStatus.value = Result(false, "Enter the PIN shown on the Apple TV within 90 seconds.")
         try {
-            return withTimeout(90_000) {
+            return withTimeout(PAIRING_TIMEOUT_MS) {
                 try {
                     input.receive()
                 } catch (_: ClosedReceiveChannelException) {
@@ -246,5 +248,8 @@ class CompanionClient(
     companion object {
         const val DISPLAY_NAME = "Kaukosaadin"
         private const val KEY_ALIAS = "companion-pairing"
+
+        /** The Apple TV only shows the PIN screen for this long. */
+        private const val PAIRING_TIMEOUT_MS = 90_000L
     }
 }

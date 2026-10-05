@@ -60,7 +60,9 @@ internal enum class RemoteKey(
     PlayPause(null, HidCommand.PlayPause),
 }
 
-/** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. */
+/** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. Angles
+ *  are a 90°-per-quarter geometry table, not tunables. */
+@Suppress("MagicNumber")
 internal enum class Direction(
     val key: RemoteKey,
     val rotation: Float,
@@ -76,10 +78,14 @@ internal enum class Direction(
     val label get() = key.name
 }
 
+// ponytail: the shell owns both clients, saved-target fallback and routing in one place;
+// split into state holders when a third target or screen lands.
+
 /**
  * One LG client and one Apple TV client share setup, pairing and readiness across
  * the screens; the remote drives whichever saved device is the selected target.
  */
+@Suppress("CyclomaticComplexMethod", "LongMethod")
 @Composable
 fun KaukosaadinApp() {
     val context = LocalContext.current.applicationContext

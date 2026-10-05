@@ -3,6 +3,7 @@ package com.lgtvremote.discovery
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,6 +32,13 @@ class TVDiscoveryTest {
         assertNull(TVDiscovery.parseResponse(response.replace("webos-second-screen:1", "other-service:1"), "192.168.1.2"))
         assertNull(TVDiscovery.parseResponse("unrelated lge traffic", "192.168.1.2"))
         assertNull(TVDiscovery.parseResponse(response + "x".repeat(4096), "192.168.1.2"))
+    }
+
+    @Test fun scannerRejectsOutOfRangeTimeoutsBeforeOpeningSocket() {
+        for (timeout in listOf(249, 15_001)) {
+            val error = assertThrows(IllegalArgumentException::class.java) { TVDiscovery().scanNetwork(timeout) }
+            assertEquals("Discovery timeout must be 250–15000 ms.", error.message)
+        }
     }
 
     @Test fun scannerHonorsDeadlineWithoutTv() {

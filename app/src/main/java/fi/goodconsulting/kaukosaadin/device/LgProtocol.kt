@@ -1,3 +1,6 @@
+// LG webOS protocol constants plus the IPv4/MAC validation bounds those packets must satisfy.
+@file:Suppress("MagicNumber")
+
 package fi.goodconsulting.kaukosaadin.device
 
 import org.json.JSONArray
@@ -106,8 +109,8 @@ object LgProtocol {
         reply: JSONObject,
         navigation: Boolean,
     ): Boolean {
-        if (reply.optString("type") == "registered") return false
-        val method = reply.optJSONObject("payload")?.optString("pairingType")?.takeIf { it.isNotEmpty() } ?: return false
+        val method = reply.optJSONObject("payload")?.optString("pairingType")?.takeIf { it.isNotEmpty() }
+        if (reply.optString("type") == "registered" || method == null) return false
         check(!navigation) { "TV needs pairing. Command discarded; use Connect / pair LG, then press again." }
         check(method.equals("PIN", ignoreCase = true)) {
             "TV did not offer PIN pairing. Check TV firmware/network-remote settings; no PROMPT fallback was used."

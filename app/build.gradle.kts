@@ -49,14 +49,8 @@ kotlin {
     }
 }
 
-// Existing violations are grandfathered in the baselines; new code is checked.
-// Regenerate with `./gradlew ktlintGenerateBaseline detektBaseline`.
-ktlint {
-    baseline.set(file("$rootDir/config/ktlint/baseline.xml"))
-}
-
+// No baselines: every finding fails the build, so an exception is an inline @Suppress with a reason.
 detekt {
-    baseline.set(file("$rootDir/config/detekt/baseline.xml"))
     buildUponDefaultConfig.set(true)
     config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
 }

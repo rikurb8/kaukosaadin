@@ -1,3 +1,6 @@
+// HAP TLV8 is a byte wire format: the 0xFF masks and the 255-byte item cap are the format.
+@file:Suppress("MagicNumber")
+
 package fi.goodconsulting.kaukosaadin.device.companion
 
 import java.io.ByteArrayOutputStream

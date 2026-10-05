@@ -1,3 +1,6 @@
+// OPACK is pyatv's binary wire format: the type tags, masks and frame sizes are the format.
+@file:Suppress("MagicNumber")
+
 package fi.goodconsulting.kaukosaadin.device.companion
 
 import java.io.ByteArrayOutputStream
@@ -22,6 +25,8 @@ internal object Opack {
     private class Packer {
         private val objects = mutableListOf<ByteArray>()
 
+        // The flat type table is the wire format; a handler per type would hide the byte layout.
+        @Suppress("CyclomaticComplexMethod")
         fun pack(value: Any?): ByteArray {
             val packed =
                 when (value) {
@@ -125,6 +130,8 @@ internal object Opack {
             return value
         }
 
+        // The flat tag table is the wire format; a handler per tag would hide the byte layout.
+        @Suppress("CyclomaticComplexMethod", "ThrowsCount")
         fun value(depth: Int): Any? {
             if (depth > MAX_DEPTH || ++items > MAX_ITEMS) throw ProtocolException("OPACK data too complex.")
             val tag = byte()

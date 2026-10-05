@@ -43,7 +43,11 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.channels.Channel as PinChannel
 
+// ponytail: one class per paired TV — settings, pairing, wake and status share one stored TV;
+// split persistence out when a second TV or transport lands.
+
 /** One operation at a time; never queues or replays navigation across reconnection. */
+@Suppress("TooManyFunctions")
 class LgClient(
     context: Context,
 ) {
@@ -85,6 +89,8 @@ class LgClient(
     val broadcast get() = prefs.getString("broadcast", "")!!
     val fingerprint get() = prefs.getString("fingerprint", "")!!
 
+    // Boundary for every LG command: unknown failures become a status message, never peer text.
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun operation(block: suspend () -> Result): Result =
         withContext(Dispatchers.IO) {
             if (!lock.tryLock()) return@withContext Result(false, "LG busy; command not queued. Try again after completion.")
@@ -220,8 +226,8 @@ class LgClient(
             val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
             try {
                 (ssl.socketFactory.createSocket() as SSLSocket).use {
-                    it.connect(InetSocketAddress(address, 3001), 5000)
-                    it.soTimeout = 5000
+                    it.connect(InetSocketAddress(address, CONTROL_PORT), SOCKET_TIMEOUT_MS)
+                    it.soTimeout = SOCKET_TIMEOUT_MS
                     it.startHandshake()
                 }
             } catch (e: SSLException) {
@@ -279,7 +285,7 @@ class LgClient(
         mutableAwaitingPin.value = true
         mutableStatus.value = Result(false, "Enter the PIN displayed on the TV within 90 seconds.")
         try {
-            return withTimeout(90_000) {
+            return withTimeout(PIN_TIMEOUT_MS) {
                 try {
                     input.receive()
                 } catch (_: kotlinx.coroutines.channels.ClosedReceiveChannelException) {
@@ -302,7 +308,7 @@ class LgClient(
                 val target = InetAddress.getByName(LgProtocol.ipv4(broadcast))
                 DatagramSocket().use { socket ->
                     socket.broadcast = true
-                    socket.send(DatagramPacket(packet, packet.size, target, 9))
+                    socket.send(DatagramPacket(packet, packet.size, target, WAKE_PORT))
                 }
                 Result(true, "Wake packet sent; TV wake NOT confirmed. Wait for TV, then Connect.")
             } else {
@@ -318,7 +324,7 @@ class LgClient(
         check(action == null || savedKey != null) { "Connect / pair with the TV awake before sending navigation." }
         val http = pinnedClient(address)
         try {
-            Channel(http, "wss://$address:3001/").use { control ->
+            Channel(http, "wss://$address:$CONTROL_PORT/").use { control ->
                 awaitRegistration(control, savedKey, action)
                 if (action == null) return Result(true, "LG registered; connection verified, not TV power or selection.")
                 val path = awaitPointerPath(control)
@@ -350,9 +356,9 @@ class LgClient(
             .Builder()
             .sslSocketFactory(ssl.socketFactory, trust)
             .hostnameVerifier { name, _ -> name == address }
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
-            .writeTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(SOCKET_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .readTimeout(SOCKET_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .writeTimeout(SOCKET_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
             .followRedirects(false)
             .followSslRedirects(false)
             .build()
@@ -366,7 +372,8 @@ class LgClient(
     ) {
         control.awaitOpen()
         control.send(LgProtocol.registration(savedKey))
-        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(if (action == null) 30 else 5)
+        val timeoutMs = if (action == null) REGISTRATION_TIMEOUT_MS else SOCKET_TIMEOUT_MS.toLong()
+        var deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         var pinSent = false
         var registered = false
         while (!registered) {
@@ -376,7 +383,7 @@ class LgClient(
                 control.send(LgProtocol.pinRequest(awaitPin()))
                 pinSent = true
                 mutableStatus.value = Result(false, "PIN submitted; waiting for TV registration.")
-                deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SOCKET_TIMEOUT_MS.toLong())
             }
             if (reply.optString("type") == "registered") {
                 val key = reply.optJSONObject("payload")?.optString("client-key")
@@ -396,7 +403,7 @@ class LgClient(
                 .put("uri", "ssap://com.webos.service.networkinput/getPointerInputSocket")
                 .toString(),
         )
-        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SOCKET_TIMEOUT_MS.toLong())
         while (true) {
             val reply = LgProtocol.response(control.receive(deadline))
             if (reply.optString("id") == "pointer") return reply.getJSONObject("payload").getString("socketPath")
@@ -426,6 +433,8 @@ class LgClient(
         }
     }
 
+    // AES-GCM's 128-bit tag and 12-byte IV describe the stored pairing format.
+    @Suppress("MagicNumber")
     private fun readKey(): String? {
         val encoded = prefs.getString("key", null) ?: return null
         return try {
@@ -462,7 +471,7 @@ class LgClient(
             webSocket: WebSocket,
             text: String,
         ) {
-            if (text.length > 65536 || events.size >= 32) webSocket.cancel() else events.offer(text)
+            if (text.length > MAX_MESSAGE_CHARS || events.size >= MAX_PENDING_MESSAGES) webSocket.cancel() else events.offer(text)
         }
 
         override fun onFailure(
@@ -490,11 +499,11 @@ class LgClient(
             code: Int,
             reason: String,
         ) {
-            closed.offer(code == 1000)
+            closed.offer(code == NORMAL_CLOSE)
         }
 
         fun awaitOpen() {
-            if (opened.poll(5, TimeUnit.SECONDS) != true) throwFailure()
+            if (opened.poll(SOCKET_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS) != true) throwFailure()
         }
 
         private fun throwFailure(): Nothing {
@@ -514,7 +523,9 @@ class LgClient(
         }
 
         fun finish() {
-            if (!socket.close(1000, null) || closed.poll(5, TimeUnit.SECONDS) != true) throw java.io.IOException("Delivery uncertain")
+            if (!socket.close(NORMAL_CLOSE, null) || closed.poll(SOCKET_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS) != true) {
+                throw java.io.IOException("Delivery uncertain")
+            }
         }
 
         override fun close() {
@@ -523,6 +534,15 @@ class LgClient(
     }
 
     companion object {
+        private const val CONTROL_PORT = 3001
+        private const val WAKE_PORT = 9
+        private const val SOCKET_TIMEOUT_MS = 5000
+        private const val REGISTRATION_TIMEOUT_MS = 30_000L
+        private const val PIN_TIMEOUT_MS = 90_000L
+        private const val MAX_MESSAGE_CHARS = 65_536
+        private const val MAX_PENDING_MESSAGES = 32
+        private const val NORMAL_CLOSE = 1000
+
         private fun digest(cert: X509Certificate) =
             MessageDigest
                 .getInstance("SHA-256")

@@ -107,28 +107,19 @@ fun AppleTvSetupScreen(
             scanStatus =
                 try {
                     devices = discovery.scan()
-                    if (devices.isEmpty()) {
-                        "No Apple TVs found. Wake it with its own remote, check same Wi-Fi, then scan again."
-                    } else {
-                        "Found ${devices.size} device(s). Names are advertised, not proven; pairing with the PIN proves the TV."
-                    }
+                    scanSummary(devices)
                 } catch (_: Exception) {
                     "Scan failed. Check Wi-Fi/LAN access, then retry."
                 }
         }
     LaunchedEffect(Unit) { if (!paired) scan() }
     if (confirmForget) {
-        AlertDialog(
-            onDismissRequest = { confirmForget = false },
-            title = { Text("Forget Apple TV?") },
-            text = { Text("This removes the saved Apple TV and its pairing. You'll need to pair it again with a new PIN.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmForget = false
-                    run { client.forget() }
-                }) { Text("Forget") }
+        ForgetAppleTvDialog(
+            onDismiss = { confirmForget = false },
+            onConfirm = {
+                confirmForget = false
+                run { client.forget() }
             },
-            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Cancel") } },
         )
     }
     Column(
@@ -146,13 +137,44 @@ fun AppleTvSetupScreen(
         Text(status.message)
         Button(enabled = !busy, onClick = ::scan) { Text("Find Apple TVs") }
         if (scanStatus.isNotEmpty()) Text(scanStatus)
-        devices.forEach { device ->
-            OutlinedButton(enabled = !busy, onClick = {
-                run { if (client.pair(device).ok) onBack() }
-            }) { Text("Pair ${device.name} · ${device.address.hostAddress}") }
-        }
+        AppleTvCandidates(devices, enabled = !busy) { device -> run { if (client.pair(device).ok) onBack() } }
         Text("Each press connects, verifies the saved pairing and waits for the Apple TV's acknowledgment. Nothing is queued or replayed.")
         if (paired) TextButton(enabled = !busy, onClick = { confirmForget = true }) { Text("Forget Apple TV") }
         TextButton(onClick = onBack) { Text("Done") }
+    }
+}
+
+/** Names come from unauthenticated advertisements; the PIN step is what proves the TV. */
+private fun scanSummary(devices: List<CompanionDiscovery.Device>) =
+    if (devices.isEmpty()) {
+        "No Apple TVs found. Wake it with its own remote, check same Wi-Fi, then scan again."
+    } else {
+        "Found ${devices.size} device(s). Names are advertised, not proven; pairing with the PIN proves the TV."
+    }
+
+@Composable
+private fun ForgetAppleTvDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Forget Apple TV?") },
+        text = { Text("This removes the saved Apple TV and its pairing. You'll need to pair it again with a new PIN.") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Forget") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun AppleTvCandidates(
+    devices: List<CompanionDiscovery.Device>,
+    enabled: Boolean,
+    onPick: (CompanionDiscovery.Device) -> Unit,
+) {
+    devices.forEach { device ->
+        OutlinedButton(enabled = enabled, onClick = { onPick(device) }) {
+            Text("Pair ${device.name} · ${device.address.hostAddress}")
+        }
     }
 }
