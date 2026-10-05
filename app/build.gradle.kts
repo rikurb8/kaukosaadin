@@ -5,6 +5,8 @@ plugins {
     // AGP 9 compiles Kotlin itself (built-in Kotlin); only the Compose
     // compiler plugin is applied explicitly.
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
 }
 
 android {
@@ -35,13 +37,26 @@ android {
     }
 
     // The host and debug Android runner use the exact same synthetic reference vectors.
-    sourceSets.getByName("testDebug").resources.directories.add("src/debug/assets")
+    sourceSets
+        .getByName("testDebug")
+        .resources.directories
+        .add("src/debug/assets")
 }
 
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
     }
+}
+
+// Existing violations are grandfathered in the baselines; new code is checked.
+// Regenerate with `./gradlew ktlintGenerateBaseline detektBaseline`.
+ktlint {
+    baseline.set(file("$rootDir/config/ktlint/baseline.xml"))
+}
+
+detekt {
+    baseline.set(file("$rootDir/config/detekt/baseline.xml"))
 }
 
 dependencies {
