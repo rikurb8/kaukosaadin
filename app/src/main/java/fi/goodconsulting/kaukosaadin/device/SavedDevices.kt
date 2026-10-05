@@ -16,6 +16,7 @@ enum class DeviceKind(
 ) {
     Lg("LG TV", "TV", "WEBOS"),
     AppleTv("Apple TV", "ATV", "TVOS"),
+    Hue("Hue Bridge", "HUE", "HUE"),
 }
 
 /**

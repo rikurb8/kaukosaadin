@@ -133,9 +133,9 @@ private fun EmptyRemoteScreen(
     ) {
         EngravedLabel("KAUKOSÄÄDIN")
         Text("No devices added", style = MaterialTheme.typography.headlineSmall)
-        Text("Scan your Wi-Fi for TVs and Apple TVs to start using the remote.", style = MaterialTheme.typography.bodyMedium)
+        Text("Scan your Wi-Fi for TVs, Apple TVs and Hue Bridges to start using the remote.", style = MaterialTheme.typography.bodyMedium)
         Button(onClick = onFindDevices) { Text("Find devices") }
-        Text("Supports Apple TV and LG webOS TVs", style = MaterialTheme.typography.bodySmall)
+        Text("Supports Apple TV, LG webOS TVs and Hue Bridges", style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = onGeneralSettings) { Text("General settings") }
     }
 }
