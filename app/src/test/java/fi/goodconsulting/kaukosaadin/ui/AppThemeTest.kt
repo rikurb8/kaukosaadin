@@ -1,0 +1,18 @@
+package fi.goodconsulting.kaukosaadin.ui
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class AppThemeTest {
+    @Test fun savedThemesRoundTripAndUnknownValuesUseClassic() {
+        AppTheme.entries.forEach { assertEquals(it, AppTheme.fromId(it.id)) }
+        assertEquals(AppTheme.Classic, AppTheme.fromId(null))
+        assertEquals(AppTheme.Classic, AppTheme.fromId("removed_theme"))
+    }
+
+    @Test fun savedLayoutsRoundTripAndUnknownValuesUseStandard() {
+        AppLayout.entries.forEach { assertEquals(it, AppLayout.fromId(it.id)) }
+        assertEquals(AppLayout.Standard, AppLayout.fromId(null))
+        assertEquals(AppLayout.Standard, AppLayout.fromId("removed_layout"))
+    }
+}

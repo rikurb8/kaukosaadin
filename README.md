@@ -30,6 +30,14 @@ crypto gate and discovery screen remain there.
 PIN pairing and saved-pairing reconnect have been operator-verified on the LG G3.
 See [LG verification and operator handoff](docs/lg-g3.md) for physical-action checks.
 
+**General settings** is available from both the empty screen and the remote, separately
+from device setup. **Theme** picks the palette: **Classic** (the original palette, following
+system light/dark mode) or **Hacker man** (a green-on-black demo theme). **Layout** picks how
+the remote screen is presented: **Standard** (the full casing, wheel and VFD display) or
+**Debug** (flat panels with a live timestamped status log, for development and
+troubleshooting). Theme and layout are independent; both apply immediately throughout the
+app and are remembered across restarts.
+
 ## Repository layout
 
 | Path | Purpose |

@@ -1,0 +1,39 @@
+# UI only; keeps saved TVs/pairing and returns the theme to Classic.
+appId: fi.goodconsulting.kaukosaadin
+tags:
+  - smoke
+---
+- stopApp
+- launchApp:
+    clearState: false
+- scrollUntilVisible:
+    element: "General settings"
+- tapOn: "General settings"
+- assertVisible: "Theme"
+- tapOn:
+    containsChild:
+      text: "Hacker man"
+- assertVisible:
+    checked: true
+    containsChild:
+      text: "Hacker man"
+- tapOn: "Done"
+- stopApp
+- launchApp:
+    clearState: false
+- scrollUntilVisible:
+    element: "General settings"
+- tapOn: "General settings"
+- assertVisible:
+    checked: true
+    containsChild:
+      text: "Hacker man"
+- tapOn:
+    containsChild:
+      text: "Classic"
+- assertVisible:
+    checked: true
+    containsChild:
+      text: "Classic"
+- back
+- assertNotVisible: "Theme"
