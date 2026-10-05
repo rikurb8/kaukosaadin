@@ -39,7 +39,11 @@ class CompanionCryptoActivity : ComponentActivity() {
             MaterialTheme {
                 Scaffold { padding ->
                     Column(
-                        Modifier.fillMaxSize().padding(padding).padding(24.dp).verticalScroll(rememberScrollState()),
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Companion crypto gate", style = MaterialTheme.typography.headlineSmall)
@@ -54,15 +58,24 @@ class CompanionCryptoActivity : ComponentActivity() {
                             status = "Running crypto checks…"
                             scope.launch {
                                 try {
-                                    checks = withContext(Dispatchers.Default) {
-                                        val vectors = assets.open("companion-crypto-vectors.json").bufferedReader().use { it.readText() }
-                                        CompanionCryptoCheck.run(vectors)
-                                    }
+                                    checks =
+                                        withContext(Dispatchers.Default) {
+                                            val vectors =
+                                                assets
+                                                    .open(
+                                                        "companion-crypto-vectors.json",
+                                                    ).bufferedReader()
+                                                    .use { it.readText() }
+                                            CompanionCryptoCheck.run(vectors)
+                                        }
                                     status = "Companion crypto: 6/6 PASS"
-                                } catch (e: CancellationException) { throw e
+                                } catch (e: CancellationException) {
+                                    throw e
                                 } catch (_: Exception) {
                                     status = "Companion crypto: FAIL. Stop; investigate compatibility before pairing."
-                                } finally { busy = false }
+                                } finally {
+                                    busy = false
+                                }
                             }
                         }) { Text("Run crypto checks") }
                         Text(status)

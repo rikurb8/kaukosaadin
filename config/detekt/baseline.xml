@@ -6,38 +6,13 @@
     <ID>CyclomaticComplexMethod:AppleTvSetupScreen.kt:@Composable fun AppleTvSetupScreen</ID>
     <ID>CyclomaticComplexMethod:CompanionDiscovery.kt:CompanionDiscovery$@Suppress("DEPRECATION") // Serialized resolveService supports the app's API 29 floor. suspend fun scan: List&lt;Device&gt;</ID>
     <ID>CyclomaticComplexMethod:KaukosaadinApp.kt:@Composable fun KaukosaadinApp</ID>
-    <ID>CyclomaticComplexMethod:KaukosaadinApp.kt:@Composable private fun RemoteScreen</ID>
     <ID>CyclomaticComplexMethod:LgConnectionScreen.kt:@Composable fun LgConnectionScreen</ID>
     <ID>CyclomaticComplexMethod:Opack.kt:Opack.Packer$fun pack: ByteArray</ID>
     <ID>CyclomaticComplexMethod:Opack.kt:Opack.Reader$fun value: Any?</ID>
     <ID>DestructuringDeclarationWithTooManyEntries:CompanionLink.kt:CompanionCredentials.Companion$val (ltpk, ltsk, atvId, clientId) = parts.map { hex -&gt; ByteArray(hex.length / 2) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() } }</ID>
-    <ID>FunctionNaming:AppleTvSetupScreen.kt:@Composable fun AppleTvPinDialog</ID>
-    <ID>FunctionNaming:AppleTvSetupScreen.kt:@Composable fun AppleTvSetupScreen</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable fun KaukosaadinApp</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun Annunciator</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun BlinkingCursor</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun DialArrow</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun Dpad</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun EmptyRemoteScreen</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun EngravedLabel</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun Key</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun Led</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun PlayPauseGlyph</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun PowerDeck</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun PowerGlyph</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun PowerKey</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun RemoteScreen</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun SpeakerGrille</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun TxLamp</ID>
-    <ID>FunctionNaming:KaukosaadinApp.kt:@Composable private fun VfdDisplay</ID>
-    <ID>FunctionNaming:LgConnectionScreen.kt:@Composable fun LgConnectionScreen</ID>
-    <ID>FunctionNaming:LgConnectionScreen.kt:@Composable fun LgPinDialog</ID>
     <ID>LongMethod:KaukosaadinApp.kt:@Composable fun KaukosaadinApp</ID>
-    <ID>LongMethod:KaukosaadinApp.kt:@Composable private fun Dpad</ID>
-    <ID>LongMethod:KaukosaadinApp.kt:@Composable private fun RemoteScreen</ID>
     <ID>LongMethod:LgConnectionScreen.kt:@Composable fun LgConnectionScreen</ID>
     <ID>LoopWithTooManyJumpStatements:TVDiscovery.kt:TVDiscovery$while</ID>
-    <ID>MagicNumber:AppleTvSetupScreen.kt:4</ID>
     <ID>MagicNumber:CompanionClient.kt:CompanionClient$90_000</ID>
     <ID>MagicNumber:CompanionCrypto.kt:CompanionCrypto$12</ID>
     <ID>MagicNumber:CompanionCrypto.kt:CompanionCrypto$32</ID>
@@ -77,26 +52,6 @@
     <ID>MagicNumber:CompanionLink.kt:HidCommand.PlayPause$14</ID>
     <ID>MagicNumber:CompanionLink.kt:HidCommand.Right$4</ID>
     <ID>MagicNumber:CompanionLink.kt:HidCommand.Select$6</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.04f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.06f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.08f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.12f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.16f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.1f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.25f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.2f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.32f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.3f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.4f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.5f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:0.65f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:1.5f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:10f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:2.6f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:20f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:35f</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:50</ID>
-    <ID>MagicNumber:KaukosaadinApp.kt:80f</ID>
     <ID>MagicNumber:KaukosaadinApp.kt:Direction.Down$180f</ID>
     <ID>MagicNumber:KaukosaadinApp.kt:Direction.Down$45f</ID>
     <ID>MagicNumber:KaukosaadinApp.kt:Direction.Left$135f</ID>
@@ -146,95 +101,6 @@
     <ID>MagicNumber:TVDiscovery.kt:TVDiscovery.Companion$160</ID>
     <ID>MagicNumber:TVDiscovery.kt:TVDiscovery.Companion$4096</ID>
     <ID>MagicNumber:Tlv8.kt:Tlv8$0xFF</ID>
-    <ID>MaxLineLength:AppleTvSetupScreen.kt:Text("Each press connects, verifies the saved pairing and waits for the Apple TV's acknowledgment. Nothing is queued or replayed.")</ID>
-    <ID>MaxLineLength:AppleTvSetupScreen.kt:else</ID>
-    <ID>MaxLineLength:AppleTvSetupScreen.kt:singleLine = true</ID>
-    <ID>MaxLineLength:AppleTvSetupScreen.kt:text = { Text("This removes the saved Apple TV and its pairing. You'll need to pair it again with a new PIN.") }</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$.</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$Result(true, "Pairing forgotten here. Also remove \"$DISPLAY_NAME\" in Apple TV Settings › Remotes and Devices.")</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$else -&gt; "Apple TV unreachable or timed out. Wake it with its own remote, check same Wi-Fi, scan again."</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$if (!lock.tryLock()) return@withContext Result(false, "Apple TV busy; press not queued. Try again after completion.")</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$is ProtocolException -&gt; "Unexpected Apple TV reply. Reconnect; if it repeats, forget and pair again."</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$return Result(submitted, if (submitted) "PIN submitted; checking with Apple TV…" else "No active PIN request. Pair again.")</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$val deviceId = prefs.getString("deviceId", null) ?: ByteArray(6).also(random::nextBytes).joinToString(":") { "%02X".format(it) }</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$val label = when (action) { PressAction.Tap -&gt; command.name; PressAction.DoubleTap -&gt; "${command.name} double tap"; PressAction.Hold -&gt; "${command.name} hold" }</ID>
-    <ID>MaxLineLength:CompanionClient.kt:CompanionClient$val rpId = prefs.getString("rpId", null) ?: ByteArray(6).also(random::nextBytes).joinToString("") { "%02x".format(it) }</ID>
-    <ID>MaxLineLength:CompanionCrypto.kt:CompanionCrypto$fun</ID>
-    <ID>MaxLineLength:CompanionCrypto.kt:CompanionCrypto$val cipher = ChaCha20Poly1305().apply { init(encrypt, AEADParameters(KeyParameter(key), 128, paddedNonce, aad)) }</ID>
-    <ID>MaxLineLength:CompanionDiscovery.kt:CompanionDiscovery$if (events.trySend(event).isFailure) events.close(IOException("Too many discovery events; retry on a quieter LAN."))</ID>
-    <ID>MaxLineLength:CompanionDiscovery.kt:CompanionDiscovery.&lt;no name provided&gt;$events.close(IOException("Companion discovery could not start ($code). Check Wi-Fi/LAN access and retry."))</ID>
-    <ID>MaxLineLength:CompanionDiscovery.kt:CompanionDiscovery.&lt;no name provided&gt;$override fun onResolveFailed</ID>
-    <ID>MaxLineLength:CompanionDiscovery.kt:CompanionDiscovery.Companion$if (address == null || address.isAnyLocalAddress || address.isLoopbackAddress || address.isMulticastAddress) return null</ID>
-    <ID>MaxLineLength:CompanionDiscoveryTest.kt:CompanionDiscoveryTest$val ipv6 = Inet6Address.getByAddress(null, byteArrayOf(0xfe.toByte(), 0x80.toByte()) + ByteArray(13) + byteArrayOf(1), 7)</ID>
-    <ID>MaxLineLength:CompanionInteropTest.kt:CompanionInteropTest$val error = assertThrows(CompanionRejected::class.java) { link.finishPairing(pending, "2222", "Kaukosaadin test") }</ID>
-    <ID>MaxLineLength:CompanionInteropTest.kt:CompanionInteropTest$val revoked = CompanionCredentials(credentials.ltpk, ByteArray(32) { 9 }, credentials.atvId, credentials.clientId)</ID>
-    <ID>MaxLineLength:CompanionInteropTest.kt:CompanionInteropTest$val script = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "tools/companion_fake_atv.py") }.first { it.exists() }</ID>
-    <ID>MaxLineLength:CompanionInteropTest.kt:CompanionInteropTest$val wrongDevice = CompanionCredentials(credentials.ltpk, credentials.ltsk, "someone-else".toByteArray(), credentials.clientId)</ID>
-    <ID>MaxLineLength:CompanionInteropTest.kt:CompanionInteropTest$val wrongKey = CompanionCredentials(ByteArray(32) { 7 }.let(CompanionCrypto::signingPublic), credentials.ltsk, credentials.atvId, credentials.clientId)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionClientInfo$internal data</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionCredentials$internal</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionCredentials$require(ltpk.size == 32 &amp;&amp; ltsk.size == 32 &amp;&amp; atvId.isNotEmpty() &amp;&amp; clientId.isNotEmpty()) { "Invalid saved pairing." }</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionCredentials.Companion$require(parts.size == 4 &amp;&amp; parts.all { it.length % 2 == 0 &amp;&amp; it.all(Char::isLetterOrDigit) }) { "Invalid saved pairing." }</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionCredentials.Companion$val (ltpk, ltsk, atvId, clientId) = parts.map { hex -&gt; ByteArray(hex.length / 2) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() } }</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$CompanionCrypto.verify(credentials.ltpk, serverPublic + identifier + publicKey, required(device, Tlv8.SIGNATURE))</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$Tlv8.SIGNATURE to CompanionCrypto.sign(credentials.ltsk, publicKey + credentials.clientId + serverPublic)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$Tlv8.write(Tlv8.SEQ_NO to byteArrayOf(3), Tlv8.PUBLIC_KEY to srp.publicKey, Tlv8.PROOF to srp.clientProof)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$fun button</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$if (!MessageDigest.isEqual(identifier, credentials.atvId)) throw SecurityException("A different device answered. Scan again or re-pair.")</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$remoteSid = (content?.get("_sid") as? Long)?.takeIf { it in 0..0xFFFFFFFFL } ?: throw ProtocolException("TV did not start a remote session.")</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$request("_sessionStop", linkedMapOf("_srvT" to SERVICE, "_sid" to ((remoteSid.toULong() shl 32) or localSid.toULong())))</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$return (header[0].toInt() and 0xFF) to if (crypto != null &amp;&amp; length &gt; 0) crypto.decrypt(payload, header) else payload</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val accessory = Tlv8.read(CompanionCrypto.aead(false, encryptKey, PS_MSG06, required(exchangeReply, Tlv8.ENCRYPTED_DATA)))</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val accessoryX = CompanionCrypto.hkdf("Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", key)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val controllerX = CompanionCrypto.hkdf("Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", key)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val length = ((header[1].toInt() and 0xFF) shl 16) or ((header[2].toInt() and 0xFF) shl 8) or (header[3].toInt() and 0xFF)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val reply = exchangeAuth(PS_START, Tlv8.write(Tlv8.METHOD to byteArrayOf(0), Tlv8.SEQ_NO to byteArrayOf(1)), "_pwTy" to 1)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val reply = exchangeAuth(PV_START, Tlv8.write(Tlv8.SEQ_NO to byteArrayOf(1), Tlv8.PUBLIC_KEY to publicKey), "_auTy" to 4)</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink$val tlv = Tlv8.read(message["_pd"] as? ByteArray ?: throw ProtocolException("Pairing reply has no pairing data."))</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink.Companion$2</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink.Companion$if (actual == null || actual.size != 1 || actual[0].toInt() != state) throw ProtocolException("Pairing reply out of order.")</ID>
-    <ID>MaxLineLength:CompanionLink.kt:CompanionLink.Companion$private fun required</ID>
-    <ID>MaxLineLength:KaukosaadinApp.kt:.</ID>
-    <ID>MaxLineLength:KaukosaadinApp.kt:Text("Back/Home: double tap = double press · hold = 1 s hold", style = MaterialTheme.typography.bodySmall)</ID>
-    <ID>MaxLineLength:KaukosaadinApp.kt:if (target == Target.Lg) "Wake only · TV power is not monitored" else "No Apple TV wake · power is not monitored"</ID>
-    <ID>MaxLineLength:KaukosaadinApp.kt:onLongClick = onLongClick?.let { { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); it() } }</ID>
-    <ID>MaxLineLength:KaukosaadinApp.kt:wakeEnabled = client.mac.isNotEmpty() &amp;&amp; client.broadcast.isNotEmpty() &amp;&amp; client.fingerprint.isNotEmpty()</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$.</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$check(address == host &amp;&amp; fingerprint.isNotEmpty()) { "Save this TV's approved setup before saving wake settings." }</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$check(mac.isNotEmpty() &amp;&amp; broadcast.isNotEmpty()) { "Save the TV's MAC and subnet broadcast in Wake settings first." }</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$check(prefs.edit().putString("key", Base64.encodeToString(encrypted, Base64.NO_WRAP)).commit()) { "Pairing could not be saved; retry pairing." }</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$check(prefs.edit().putString("name", LgProtocol.tvName(displayName)).commit()) { "Could not save TV name. Try again." }</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$else</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$else -&gt; "LG unreachable or timed out. Wake TV, check Wi-Fi/LAN permission and address, then reconnect."</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$if (!lock.tryLock()) return@withContext Result(false, "LG busy; command not queued. Try again after completion.")</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$if (action == null) return Result(true, "LG registered; connection verified, not TV power or selection.")</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$if (reply.optString("id") == "pointer") path = reply.getJSONObject("payload").getString("socketPath")</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$init</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$is CertificateException, is SSLException -&gt; "Certificate rejected. Inspect and explicitly approve the TV certificate; never downgrade to ws."</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$return</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient$}</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient.Channel$if (!socket.close(1000, null) || closed.poll(5, TimeUnit.SECONDS) != true) throw java.io.IOException("Delivery uncertain")</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient.Channel$override fun onClosing</ID>
-    <ID>MaxLineLength:LgClient.kt:LgClient.Companion.&lt;no name provided&gt;$override fun checkClientTrusted</ID>
-    <ID>MaxLineLength:LgConnectionScreen.kt:Button(enabled = !busy &amp;&amp; wakeSaved, onClick = { run { client.send(LgProtocol.Action.Wake) } }) { Text("LG Wake") }</ID>
-    <ID>MaxLineLength:LgConnectionScreen.kt:OutlinedButton(enabled = !busy, onClick = { run { client.saveName(host, name) } }) { Text("Save TV name") }</ID>
-    <ID>MaxLineLength:LgConnectionScreen.kt:Text("Enter the code shown on the TV. No physical remote approval is requested. Expires after 90 seconds.")</ID>
-    <ID>MaxLineLength:LgConnectionScreen.kt:Text("First trust cannot prove TV identity. Verify the address/certificate using a trusted router or independent client before approving. Changed certificates require explicit approval again.")</ID>
-    <ID>MaxLineLength:LgConnectionScreen.kt:text = { Text("This removes the saved TV, pairing and wake settings. You'll need to add and pair it again.") }</ID>
-    <ID>MaxLineLength:LgProtocol.kt:LgProtocol$check(json.optString("type") != "error") { "TV rejected the request or PIN. Retry Connect with a new TV code; forget pairing if saved credentials were revoked." }</ID>
-    <ID>MaxLineLength:LgProtocol.kt:LgProtocol$val method = reply.optJSONObject("payload")?.optString("pairingType")?.takeIf { it.isNotEmpty() } ?: return false</ID>
-    <ID>MaxLineLength:LgProtocolTest.kt:LgProtocolTest$listOf("", "ff:ff:ff:ff:ff:ff", "00:00:00:00:00:00", "02:11:22:33:44:GG").forEach { rejected { LgProtocol.magicPacket(it) } }</ID>
-    <ID>MaxLineLength:LgProtocolTest.kt:LgProtocolTest$repeat(16) { assertArrayEquals(byteArrayOf(2, 17, 34, 51, 68, 85), packet.copyOfRange(6 + it * 6, 12 + it * 6)) }</ID>
-    <ID>MaxLineLength:LgProtocolTest.kt:LgProtocolTest$try { block(); fail("Expected rejection") } catch (_: IllegalArgumentException) {} catch (_: IllegalStateException) {}</ID>
-    <ID>MaxLineLength:LgProtocolTest.kt:LgProtocolTest$val accepted = LgProtocol.response("{\"type\":\"response\",\"id\":\"pair-pin\",\"payload\":{\"returnValue\":true}}")</ID>
-    <ID>MaxLineLength:Opack.kt:Opack.Packer$is ULong -&gt; if (value &lt;= Long.MAX_VALUE.toULong()) integer(value.toLong()) else byteArrayOf(0x33) + little(value.toLong(), 8)</ID>
-    <ID>MaxLineLength:Opack.kt:Opack.Reader$if (index in objects.indices) objects[index.toInt()] else throw ProtocolException("Invalid OPACK reference.")</ID>
-    <ID>MaxLineLength:Opack.kt:Opack.Reader$return</ID>
-    <ID>MaxLineLength:Opack.kt:Opack.Reader$tag and 0xF0 == 0xD0 -&gt; buildList { repeatItems(tag) { add(value(depth + 1)) } }.also { remember = false }</ID>
-    <ID>MaxLineLength:TVDiscovery.kt:TVDiscovery.Companion$name = try { URLDecoder.decode(rawName, "UTF-8") } catch (_: IllegalArgumentException) { rawName }</ID>
-    <ID>MaxLineLength:TVDiscoveryTest.kt:TVDiscoveryTest$assertEquals("Bad%XX", TVDiscovery.parseResponse(response.replace("Living%20Room%20LG", "Bad%XX"), "192.168.1.2")!!.name)</ID>
-    <ID>MaxLineLength:TVDiscoveryTest.kt:TVDiscoveryTest$assertEquals("LGTV", TVDiscovery.parseResponse(response.replace("Living%20Room%20LG", "LG%0ATV"), "192.168.1.2")!!.name)</ID>
-    <ID>MaxLineLength:TVDiscoveryTest.kt:TVDiscoveryTest$assertNull(TVDiscovery.parseResponse(response.replace("webos-second-screen:1", "other-service:1"), "192.168.1.2"))</ID>
     <ID>MayBeConstant:CompanionLink.kt:CompanionLink.Companion$private val TIMEOUT_NS = 5_000_000_000L</ID>
     <ID>ReturnCount:CompanionDiscovery.kt:CompanionDiscovery.Companion$internal fun endpoint: Device?</ID>
     <ID>ReturnCount:LgProtocol.kt:LgProtocol$fun needsPin: Boolean</ID>
@@ -247,17 +113,6 @@
     <ID>TooGenericExceptionCaught:CompanionLink.kt:CompanionLink.Companion$e: Exception</ID>
     <ID>TooGenericExceptionCaught:LgClient.kt:LgClient$e: Exception</ID>
     <ID>TooManyFunctions:CompanionLink.kt:CompanionLink : Closeable</ID>
-    <ID>TooManyFunctions:KaukosaadinApp.kt:fi.goodconsulting.kaukosaadin.ui.KaukosaadinApp.kt</ID>
     <ID>TooManyFunctions:LgClient.kt:LgClient</ID>
-    <ID>WildcardImport:AppleTvSetupScreen.kt:import androidx.compose.foundation.layout.*</ID>
-    <ID>WildcardImport:AppleTvSetupScreen.kt:import androidx.compose.material3.*</ID>
-    <ID>WildcardImport:AppleTvSetupScreen.kt:import androidx.compose.runtime.*</ID>
-    <ID>WildcardImport:LgClient.kt:import javax.net.ssl.*</ID>
-    <ID>WildcardImport:LgClient.kt:import okhttp3.*</ID>
-    <ID>WildcardImport:LgConnectionScreen.kt:import androidx.compose.foundation.layout.*</ID>
-    <ID>WildcardImport:LgConnectionScreen.kt:import androidx.compose.material3.*</ID>
-    <ID>WildcardImport:LgConnectionScreen.kt:import androidx.compose.runtime.*</ID>
-    <ID>WildcardImport:LgProtocolTest.kt:import org.junit.Assert.*</ID>
-    <ID>WildcardImport:TVDiscoveryTest.kt:import org.junit.Assert.*</ID>
   </CurrentIssues>
 </SmellBaseline>

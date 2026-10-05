@@ -14,7 +14,7 @@ class FitScaleTest {
     }
 
     @Test fun shrinkingStopsAtTheFloorSoTheRestScrolls() {
-        assertEquals(MinFitScale, fitScale(contentHeight = 1400, availableHeight = 700), 0f)
-        assertEquals(MinFitScale, fitScale(contentHeight = 100_000, availableHeight = 700), 0f)
+        assertEquals(MIN_FIT_SCALE, fitScale(contentHeight = 1400, availableHeight = 700), 0f)
+        assertEquals(MIN_FIT_SCALE, fitScale(contentHeight = 100_000, availableHeight = 700), 0f)
     }
 }

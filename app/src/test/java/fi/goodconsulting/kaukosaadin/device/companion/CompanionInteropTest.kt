@@ -27,22 +27,32 @@ class CompanionInteropTest {
         val python = System.getenv("COMPANION_PYATV_PYTHON")
         val reference = System.getenv("COMPANION_PYATV_REF")
         assumeTrue("pyatv interop peer not configured", python != null && reference != null)
-        val script = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "tools/companion_fake_atv.py") }.first { it.exists() }
+        val script =
+            generateSequence(
+                File("").absoluteFile,
+            ) { it.parentFile }.map { File(it, "tools/companion_fake_atv.py") }.first { it.exists() }
         peer = ProcessBuilder(python, script.path, reference).redirectError(ProcessBuilder.Redirect.INHERIT).start()
         Thread { peer.inputStream.bufferedReader().forEachLine { lines.put(it) } }.apply { isDaemon = true }.start()
         port = next().removePrefix("PORT ").toInt()
     }
 
-    @After fun stopPeer() { if (::peer.isInitialized) { peer.outputStream.close(); peer.destroy() } }
+    @After fun stopPeer() {
+        if (::peer.isInitialized) {
+            peer.outputStream.close()
+            peer.destroy()
+        }
+    }
 
     private fun next() = checkNotNull(lines.poll(15, TimeUnit.SECONDS)) { "pyatv peer said nothing" }
+
     private fun open() = CompanionLink.open(InetAddress.getLoopbackAddress(), port)
 
     @Test fun pairVerifyAndPressMenuAndHome() {
-        val credentials = open().use { link ->
-            val pending = link.startPairing()
-            link.finishPairing(pending, "1111", "Kaukosaadin test")
-        }
+        val credentials =
+            open().use { link ->
+                val pending = link.startPairing()
+                link.finishPairing(pending, "1111", "Kaukosaadin test")
+            }
         assertEquals("PAIRED", next())
         // pyatv must be able to parse what we would save.
         assertEquals(credentials.encode(), CompanionCredentials.decode(credentials.encode()).encode())
@@ -85,7 +95,13 @@ class CompanionInteropTest {
         val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
         val wrongDevice = CompanionCredentials(credentials.ltpk, credentials.ltsk, "someone-else".toByteArray(), credentials.clientId)
         open().use { link -> assertThrows(SecurityException::class.java) { link.verify(wrongDevice) } }
-        val wrongKey = CompanionCredentials(ByteArray(32) { 7 }.let(CompanionCrypto::signingPublic), credentials.ltsk, credentials.atvId, credentials.clientId)
+        val wrongKey =
+            CompanionCredentials(
+                ByteArray(32) { 7 }.let(CompanionCrypto::signingPublic),
+                credentials.ltsk,
+                credentials.atvId,
+                credentials.clientId,
+            )
         open().use { link -> assertThrows(SecurityException::class.java) { link.verify(wrongKey) } }
         // The TV checks our signature too: a stale/forgotten pairing must fail closed.
         val revoked = CompanionCredentials(credentials.ltpk, ByteArray(32) { 9 }, credentials.atvId, credentials.clientId)

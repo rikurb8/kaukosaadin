@@ -1,16 +1,36 @@
 package fi.goodconsulting.kaukosaadin.ui
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.activity.compose.BackHandler
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
 import kotlinx.coroutines.launch
@@ -21,7 +41,10 @@ fun LgPinDialog(client: LgClient) {
     val awaitingPin by client.awaitingPin.collectAsState()
     var pin by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
-    LaunchedEffect(awaitingPin) { pin = ""; pinError = "" }
+    LaunchedEffect(awaitingPin) {
+        pin = ""
+        pinError = ""
+    }
     DisposableEffect(client) { onDispose { client.cancelPairing() } }
     if (awaitingPin) {
         AlertDialog(
@@ -30,9 +53,14 @@ fun LgPinDialog(client: LgClient) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Enter the code shown on the TV. No physical remote approval is requested. Expires after 90 seconds.")
-                    OutlinedTextField(pin, { pin = it }, label = { Text("TV PIN") }, singleLine = true,
+                    OutlinedTextField(
+                        pin,
+                        { pin = it },
+                        label = { Text("TV PIN") },
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        visualTransformation = PasswordVisualTransformation())
+                        visualTransformation = PasswordVisualTransformation(),
+                    )
                     if (pinError.isNotEmpty()) Text(pinError)
                 }
             },
@@ -49,7 +77,11 @@ fun LgPinDialog(client: LgClient) {
 }
 
 @Composable
-fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> Unit) {
+fun LgConnectionScreen(
+    padding: PaddingValues,
+    client: LgClient,
+    onBack: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val status by client.status.collectAsState()
     val devices by client.devices.collectAsState()
@@ -65,20 +97,32 @@ fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> U
     var approved by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<LgClient.Result?>(null) }
+
     fun run(block: suspend () -> LgClient.Result) {
         if (busy) return
         busy = true
         scope.launch {
-            try { result = block() } finally { busy = false }
+            try {
+                result = block()
+            } finally {
+                busy = false
+            }
         }
     }
     LaunchedEffect(client) {
         run { client.discover() }
     }
-    val setupSaved = host.isNotEmpty() && host == client.host &&
-        fingerprint.isNotEmpty() && fingerprint == client.fingerprint
-    val wakeSaved = setupSaved && mac.isNotEmpty() && broadcast.isNotEmpty() &&
-        mac == client.mac && broadcast == client.broadcast
+    val setupSaved =
+        host.isNotEmpty() &&
+            host == client.host &&
+            fingerprint.isNotEmpty() &&
+            fingerprint == client.fingerprint
+    val wakeSaved =
+        setupSaved &&
+            mac.isNotEmpty() &&
+            broadcast.isNotEmpty() &&
+            mac == client.mac &&
+            broadcast == client.broadcast
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
@@ -93,8 +137,14 @@ fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> U
             dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
         )
     }
-    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         Text("TV setup", style = MaterialTheme.typography.titleLarge)
         TextButton(onClick = onBack) { Text("Done") }
         Text("Supports LG webOS TVs on a trusted home LAN. Wake only — no power-off.")
@@ -103,7 +153,11 @@ fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> U
         devices.forEach { tv ->
             OutlinedButton(enabled = !busy, onClick = {
                 if (host != tv.ip) {
-                    host = tv.ip; mac = ""; broadcast = ""; fingerprint = ""; approved = false
+                    host = tv.ip
+                    mac = ""
+                    broadcast = ""
+                    fingerprint = ""
+                    approved = false
                 }
                 name = if (tv.name == tv.ip) "LG TV" else tv.name
             }) { Text("${tv.name} · ${tv.ip}") }
@@ -113,7 +167,12 @@ fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> U
         TextButton(enabled = !busy, onClick = { manualAddress = !manualAddress }) { Text("Manual address fallback") }
         if (manualAddress) {
             OutlinedTextField(host, {
-                host = it; name = "LG TV"; mac = ""; broadcast = ""; approved = false; fingerprint = ""
+                host = it
+                name = "LG TV"
+                mac = ""
+                broadcast = ""
+                approved = false
+                fingerprint = ""
             }, label = { Text("TV IPv4 address") }, enabled = !busy)
         }
         if (host.isNotEmpty()) {
@@ -133,7 +192,10 @@ fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> U
             }
         }) { Text("Inspect TV certificate") }
         Text("Certificate SHA-256: ${fingerprint.ifEmpty { "not inspected" }}")
-        Text("First trust cannot prove TV identity. Verify the address/certificate using a trusted router or independent client before approving. Changed certificates require explicit approval again.")
+        Text(
+            "First trust cannot prove TV identity. Verify the address/certificate using a trusted router or " +
+                "independent client before approving. Changed certificates require explicit approval again.",
+        )
         Row {
             Checkbox(approved, { approved = it }, enabled = !busy && fingerprint.isNotEmpty())
             Text("I verified this TV certificate", Modifier.padding(top = 12.dp))
@@ -165,7 +227,8 @@ fun LgConnectionScreen(padding: PaddingValues, client: LgClient, onBack: () -> U
         Button(enabled = !busy, onClick = {
             run {
                 val forgotten = client.forget()
-                fingerprint = ""; approved = false
+                fingerprint = ""
+                approved = false
                 forgotten
             }
         }) { Text("Forget LG pairing and certificate") }

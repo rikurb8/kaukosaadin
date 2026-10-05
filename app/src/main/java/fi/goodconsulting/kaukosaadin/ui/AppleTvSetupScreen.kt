@@ -1,12 +1,30 @@
 package fi.goodconsulting.kaukosaadin.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -20,7 +38,10 @@ fun AppleTvPinDialog(client: CompanionClient) {
     val awaitingPin by client.awaitingPin.collectAsState()
     var pin by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf("") }
-    LaunchedEffect(awaitingPin) { pin = ""; pinError = "" }
+    LaunchedEffect(awaitingPin) {
+        pin = ""
+        pinError = ""
+    }
     DisposableEffect(client) { onDispose { client.cancelPairing() } }
     if (awaitingPin) {
         AlertDialog(
@@ -29,8 +50,13 @@ fun AppleTvPinDialog(client: CompanionClient) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Enter the four digits shown on the Apple TV. Expires after 90 seconds.")
-                    OutlinedTextField(pin, { pin = it.filter(Char::isDigit).take(4) }, label = { Text("Apple TV PIN") },
-                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
+                    OutlinedTextField(
+                        pin,
+                        { pin = it.filter(Char::isDigit).take(4) },
+                        label = { Text("Apple TV PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    )
                     if (pinError.isNotEmpty()) Text(pinError)
                 }
             },
@@ -61,20 +87,35 @@ fun AppleTvSetupScreen(
     var scanStatus by remember { mutableStateOf("") }
     var devices by remember { mutableStateOf(emptyList<CompanionDiscovery.Device>()) }
     var confirmForget by remember { mutableStateOf(false) }
+
     fun run(block: suspend () -> Unit) {
         if (busy) return
         busy = true
-        scope.launch { try { block() } finally { busy = false } }
+        scope.launch {
+            try {
+                block()
+            } finally {
+                busy = false
+            }
+        }
     }
-    fun scan() = run {
-        scanStatus = "Scanning…"
-        devices = emptyList()
-        scanStatus = try {
-            devices = discovery.scan()
-            if (devices.isEmpty()) "No Apple TVs found. Wake it with its own remote, check same Wi-Fi, then scan again."
-            else "Found ${devices.size} device(s). Names are advertised, not proven; pairing with the PIN proves the TV."
-        } catch (_: Exception) { "Scan failed. Check Wi-Fi/LAN access, then retry." }
-    }
+
+    fun scan() =
+        run {
+            scanStatus = "Scanning…"
+            devices = emptyList()
+            scanStatus =
+                try {
+                    devices = discovery.scan()
+                    if (devices.isEmpty()) {
+                        "No Apple TVs found. Wake it with its own remote, check same Wi-Fi, then scan again."
+                    } else {
+                        "Found ${devices.size} device(s). Names are advertised, not proven; pairing with the PIN proves the TV."
+                    }
+                } catch (_: Exception) {
+                    "Scan failed. Check Wi-Fi/LAN access, then retry."
+                }
+        }
     LaunchedEffect(Unit) { if (!paired) scan() }
     if (confirmForget) {
         AlertDialog(
@@ -82,13 +123,22 @@ fun AppleTvSetupScreen(
             title = { Text("Forget Apple TV?") },
             text = { Text("This removes the saved Apple TV and its pairing. You'll need to pair it again with a new PIN.") },
             confirmButton = {
-                TextButton(onClick = { confirmForget = false; run { client.forget() } }) { Text("Forget") }
+                TextButton(onClick = {
+                    confirmForget = false
+                    run { client.forget() }
+                }) { Text("Forget") }
             },
             dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Cancel") } },
         )
     }
-    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
         Text("Apple TV setup", style = MaterialTheme.typography.titleLarge)
         TextButton(onClick = onBack) { Text("Done") }
         Text("Pairs with an Apple TV on a trusted home LAN using the PIN it shows. No wake or power control.")

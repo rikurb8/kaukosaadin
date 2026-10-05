@@ -1,12 +1,22 @@
 package fi.goodconsulting.kaukosaadin.device
 
-import org.junit.Assert.*
-import org.junit.Test
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Test
 
 class LgProtocolTest {
     private fun rejected(block: () -> Unit) {
-        try { block(); fail("Expected rejection") } catch (_: IllegalArgumentException) {} catch (_: IllegalStateException) {}
+        try {
+            block()
+            fail("Expected rejection")
+        } catch (_: IllegalArgumentException) {
+        } catch (_: IllegalStateException) {
+        }
     }
 
     @Test fun tvNamesAreSafeAndNotModelSpecific() {
@@ -67,8 +77,12 @@ class LgProtocolTest {
         }
         val safe = "wss://192.168.1.2:3001/resources/input?token=example"
         assertEquals(safe, LgProtocol.pointerUrl(safe, "192.168.1.2"))
-        listOf("ws://192.168.1.2:3000/input", "wss://192.168.1.3:3001/input", "wss://192.168.1.2:443/input",
-            "wss://user@192.168.1.2:3001/input").forEach { rejected { LgProtocol.pointerUrl(it, "192.168.1.2") } }
+        listOf(
+            "ws://192.168.1.2:3000/input",
+            "wss://192.168.1.3:3001/input",
+            "wss://192.168.1.2:443/input",
+            "wss://user@192.168.1.2:3001/input",
+        ).forEach { rejected { LgProtocol.pointerUrl(it, "192.168.1.2") } }
         rejected { LgProtocol.response("{\"type\":\"error\",\"error\":\"secret\"}") }
         rejected { LgProtocol.response("{\"type\":\"response\",\"payload\":{\"returnValue\":false}}") }
         assertEquals("registered", LgProtocol.response("{\"type\":\"registered\"}").getString("type"))

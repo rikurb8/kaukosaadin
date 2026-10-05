@@ -57,6 +57,8 @@ ktlint {
 
 detekt {
     baseline.set(file("$rootDir/config/detekt/baseline.xml"))
+    buildUponDefaultConfig.set(true)
+    config.setFrom(files("$rootDir/config/detekt/detekt.yml"))
 }
 
 dependencies {

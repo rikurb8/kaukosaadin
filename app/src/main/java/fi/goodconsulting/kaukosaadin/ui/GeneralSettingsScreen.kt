@@ -22,7 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
-internal enum class AppTheme(val id: String, val label: String, val description: String) {
+internal enum class AppTheme(
+    val id: String,
+    val label: String,
+    val description: String,
+) {
     Classic("classic", "Classic", "Cream and charcoal with an orange accent. Follows system light/dark mode."),
     HackerMan("hacker_man", "Hacker man", "Demo theme: phosphor green on black. Always dark."),
     ;
@@ -33,7 +37,11 @@ internal enum class AppTheme(val id: String, val label: String, val description:
 }
 
 /** How the remote is laid out; colors are chosen separately by [AppTheme]. */
-internal enum class AppLayout(val id: String, val label: String, val description: String) {
+internal enum class AppLayout(
+    val id: String,
+    val label: String,
+    val description: String,
+) {
     Standard("standard", "Standard", "The remote as designed: full casing, wheel and VFD display."),
     Debug("debug", "Debug", "Flat panels with a live status log, for development and troubleshooting."),
     ;
@@ -54,7 +62,11 @@ internal fun GeneralSettingsScreen(
 ) {
     BackHandler(onBack = onBack)
     Column(
-        Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("General settings", style = MaterialTheme.typography.titleLarge)
@@ -78,7 +90,8 @@ private fun <T> ChoiceGroup(
     Column(Modifier.selectableGroup()) {
         options.forEach { option ->
             Row(
-                Modifier.fillMaxWidth()
+                Modifier
+                    .fillMaxWidth()
                     .selectable(selected = selected == option, role = Role.RadioButton, onClick = { onSelect(option) })
                     .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,

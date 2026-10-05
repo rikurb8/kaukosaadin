@@ -12,6 +12,9 @@ local.properties
 *.iml
 .DS_Store
 
+# Python tooling
+__pycache__/
+
 # Signing material — never commit
 *.jks
 *.keystore

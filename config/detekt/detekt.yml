@@ -1,0 +1,12 @@
+naming:
+  FunctionNaming:
+    # Compose composables are PascalCase by convention.
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+
+style:
+  MagicNumber:
+    # Compose layout literals (dp/sp/fractions) are not magic by detekt's definition.
+    ignoreAnnotated: ['Composable']
+  MaxLineLength:
+    # Match ktlint's max_line_length.
+    maxLineLength: 140

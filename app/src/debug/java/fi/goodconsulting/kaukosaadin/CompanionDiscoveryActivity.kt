@@ -39,7 +39,11 @@ class CompanionDiscoveryActivity : ComponentActivity() {
             MaterialTheme {
                 Scaffold { padding ->
                     Column(
-                        Modifier.fillMaxSize().padding(padding).padding(24.dp).verticalScroll(rememberScrollState()),
+                        Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .padding(24.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("Companion discovery", style = MaterialTheme.typography.headlineSmall)
@@ -48,17 +52,20 @@ class CompanionDiscoveryActivity : ComponentActivity() {
                             busy = true
                             devices = emptyList()
                             status = "Scanning Companion services…"
-                            job = scope.launch {
-                                try {
-                                    devices = discovery.scan()
-                                    status = "Scan complete: ${devices.size} Companion service(s)"
-                                } catch (e: CancellationException) {
-                                    status = "Scan cancelled"
-                                    throw e
-                                } catch (_: Exception) {
-                                    status = "Discovery failed. Check Wi-Fi/LAN access and router isolation, then retry."
-                                } finally { busy = false }
-                            }
+                            job =
+                                scope.launch {
+                                    try {
+                                        devices = discovery.scan()
+                                        status = "Scan complete: ${devices.size} Companion service(s)"
+                                    } catch (e: CancellationException) {
+                                        status = "Scan cancelled"
+                                        throw e
+                                    } catch (_: Exception) {
+                                        status = "Discovery failed. Check Wi-Fi/LAN access and router isolation, then retry."
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
                         }) { Text("Scan Companion services") }
                         Button(enabled = busy, onClick = { job?.cancel() }) { Text("Cancel scan") }
                         Text(status)
@@ -67,7 +74,10 @@ class CompanionDiscoveryActivity : ComponentActivity() {
                             Text("${device.address.hostAddress} · port ${device.port}")
                         }
                         Text("Companion advertisements may include non-TV devices. Discovery proves no identity or pairing.")
-                        Text("No results? Turn Apple TV on and check the same LAN. A sleeping device may stop advertising; saved setup is unchanged.")
+                        Text(
+                            "No results? Turn Apple TV on and check the same LAN. A sleeping device may stop " +
+                                "advertising; saved setup is unchanged.",
+                        )
                     }
                 }
             }

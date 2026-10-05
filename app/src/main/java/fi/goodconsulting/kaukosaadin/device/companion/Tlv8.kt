@@ -25,7 +25,9 @@ internal object Tlv8 {
             var position = 0
             while (position < value.size) {
                 val size = minOf(255, value.size - position)
-                out.write(tag); out.write(size); out.write(value, position, size)
+                out.write(tag)
+                out.write(size)
+                out.write(value, position, size)
                 position += size
             }
         }

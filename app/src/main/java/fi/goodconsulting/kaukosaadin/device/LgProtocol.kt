@@ -5,11 +5,24 @@ import org.json.JSONObject
 import java.net.URI
 
 object LgProtocol {
-    enum class Action(val key: String?) {
-        Wake(null), Up("UP"), Down("DOWN"), Left("LEFT"), Right("RIGHT"), Select("ENTER"), Back("BACK")
+    enum class Action(
+        val key: String?,
+    ) {
+        Wake(null),
+        Up("UP"),
+        Down("DOWN"),
+        Left("LEFT"),
+        Right("RIGHT"),
+        Select("ENTER"),
+        Back("BACK"),
     }
 
-    fun tvName(value: String): String = value.filterNot { it.isISOControl() }.trim().take(160).ifBlank { "LG TV" }
+    fun tvName(value: String): String =
+        value
+            .filterNot { it.isISOControl() }
+            .trim()
+            .take(160)
+            .ifBlank { "LG TV" }
 
     fun ipv4(value: String): String {
         val parts = value.split('.')
@@ -22,7 +35,10 @@ object LgProtocol {
         return value
     }
 
-    fun pairingFingerprint(address: String, pin: String): String {
+    fun pairingFingerprint(
+        address: String,
+        pin: String,
+    ): String {
         ipv4(address)
         require(pin.matches(Regex("[0-9a-fA-F]{64}"))) { "Inspect and approve the TV certificate first." }
         return pin.lowercase()
@@ -40,28 +56,56 @@ object LgProtocol {
         return "type:button\nname:${action.key}\n\n"
     }
 
-    fun pointerUrl(value: String, host: String): String {
+    fun pointerUrl(
+        value: String,
+        host: String,
+    ): String {
         val uri = URI(value)
-        require(uri.scheme == "wss" && uri.host == host && uri.port == 3001 &&
-            uri.userInfo == null && uri.fragment == null && !uri.rawPath.isNullOrEmpty()) {
+        require(
+            uri.scheme == "wss" &&
+                uri.host == host &&
+                uri.port == 3001 &&
+                uri.userInfo == null &&
+                uri.fragment == null &&
+                !uri.rawPath.isNullOrEmpty(),
+        ) {
             "TV returned an unsafe pointer URL; no cleartext fallback is allowed."
         }
         return value
     }
 
-    fun registration(key: String?): String = JSONObject().put("id", "register").put("type", "register")
-        .put("payload", JSONObject().put("pairingType", "PIN").put("forcePairing", false)
-            .put("manifest", JSONObject().put("manifestVersion", 1).put("appVersion", "0.1")
-                .put("permissions", JSONArray(listOf("CONTROL_MOUSE_AND_KEYBOARD"))))
-            .apply { if (key != null) put("client-key", key) }).toString()
+    fun registration(key: String?): String =
+        JSONObject()
+            .put("id", "register")
+            .put("type", "register")
+            .put(
+                "payload",
+                JSONObject()
+                    .put("pairingType", "PIN")
+                    .put("forcePairing", false)
+                    .put(
+                        "manifest",
+                        JSONObject()
+                            .put("manifestVersion", 1)
+                            .put("appVersion", "0.1")
+                            .put("permissions", JSONArray(listOf("CONTROL_MOUSE_AND_KEYBOARD"))),
+                    ).apply { if (key != null) put("client-key", key) },
+            ).toString()
 
     fun pinRequest(pin: String): String {
         require(pin.matches(Regex("[0-9]{4,8}"))) { "Enter the TV's 4–8 digit PIN, including leading zeros." }
-        return JSONObject().put("id", "pair-pin").put("type", "request")
-            .put("uri", "ssap://pairing/setPin").put("payload", JSONObject().put("pin", pin)).toString()
+        return JSONObject()
+            .put("id", "pair-pin")
+            .put("type", "request")
+            .put("uri", "ssap://pairing/setPin")
+            .put("payload", JSONObject().put("pin", pin))
+            .toString()
     }
 
-    fun needsPin(reply: JSONObject, navigation: Boolean): Boolean {
+    fun needsPin(
+        reply: JSONObject,
+        navigation: Boolean,
+    ): Boolean {
         if (reply.optString("type") == "registered") return false
         val method = reply.optJSONObject("payload")?.optString("pairingType")?.takeIf { it.isNotEmpty() } ?: return false
         check(!navigation) { "TV needs pairing. Command discarded; use Connect / pair LG, then press again." }
@@ -73,7 +117,9 @@ object LgProtocol {
 
     fun response(raw: String): JSONObject {
         val json = JSONObject(raw)
-        check(json.optString("type") != "error") { "TV rejected the request or PIN. Retry Connect with a new TV code; forget pairing if saved credentials were revoked." }
+        check(json.optString("type") != "error") {
+            "TV rejected the request or PIN. Retry Connect with a new TV code; forget pairing if saved credentials were revoked."
+        }
         check(json.optJSONObject("payload")?.optBoolean("returnValue", true) != false) {
             "TV refused the request. Reconnect or forget pairing."
         }

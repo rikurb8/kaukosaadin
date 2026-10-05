@@ -7,16 +7,31 @@ import java.math.BigInteger
 /** Identical synthetic checks on the host JVM and the phone. Never prints key material. */
 internal object CompanionCryptoCheck {
     const val REVISION = "b277a4c8222ecdcbaab8a24e3e713ca44765adb4"
+
     private fun String.bytes(): ByteArray {
         require(length % 2 == 0)
         return chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
+
     private fun JSONObject.bytes(key: String) = getString(key).bytes()
-    private fun same(actual: ByteArray, expected: ByteArray) { check(actual.contentEquals(expected)) }
+
+    private fun same(
+        actual: ByteArray,
+        expected: ByteArray,
+    ) {
+        check(actual.contentEquals(expected))
+    }
+
     private fun changed(bytes: ByteArray) = bytes.copyOf().also { it[it.lastIndex] = (it.last().toInt() xor 1).toByte() }
+
     private inline fun <reified T : Exception> rejects(block: () -> Unit) {
         var rejected = false
-        try { block() } catch (e: Exception) { check(e is T); rejected = true }
+        try {
+            block()
+        } catch (e: Exception) {
+            check(e is T)
+            rejected = true
+        }
         check(rejected) { "Invalid input was accepted" }
     }
 
@@ -24,8 +39,14 @@ internal object CompanionCryptoCheck {
         val data = JSONObject(json)
         check(data.getString("revision") == REVISION)
         val passed = mutableListOf<String>()
-        fun step(name: String, block: () -> Unit) {
-            try { block() } catch (e: Exception) {
+
+        fun step(
+            name: String,
+            block: () -> Unit,
+        ) {
+            try {
+                block()
+            } catch (e: Exception) {
                 // No exception cause/message: could contain future peer or credential data.
                 error("$name failed (${e.javaClass.simpleName})")
             }
@@ -38,8 +59,11 @@ internal object CompanionCryptoCheck {
             val vectors = data.getJSONArray("srp")
             for (i in 0 until vectors.length()) {
                 val v = vectors.getJSONObject(i)
-                fun setup(pin: String = v.getString("pin"), peer: ByteArray = v.bytes("serverPublic")) =
-                    CompanionCrypto.PairSetup(pin, v.bytes("salt"), peer, v.bytes("seed"))
+
+                fun setup(
+                    pin: String = v.getString("pin"),
+                    peer: ByteArray = v.bytes("serverPublic"),
+                ) = CompanionCrypto.PairSetup(pin, v.bytes("salt"), peer, v.bytes("seed"))
                 val setup = setup()
                 same(setup.publicKey, v.bytes("public"))
                 same(setup.clientProof, v.bytes("proof"))
@@ -51,7 +75,15 @@ internal object CompanionCryptoCheck {
                 rejects<SecurityException> { setup().verifyServer(byteArrayOf()) }
                 rejects<SecurityException> { setup("9999").verifyServer(v.bytes("serverProof")) }
                 rejects<IllegalArgumentException> { setup(peer = byteArrayOf(0)) }
-                rejects<IllegalArgumentException> { setup(peer = group.n.toByteArray().drop(1).toByteArray()) }
+                rejects<IllegalArgumentException> {
+                    setup(
+                        peer =
+                            group.n
+                                .toByteArray()
+                                .drop(1)
+                                .toByteArray(),
+                    )
+                }
                 rejects<IllegalArgumentException> { setup(pin = "12345") }
             }
         }
@@ -93,21 +125,45 @@ internal object CompanionCryptoCheck {
         step("Transport 12-byte LE nonces / AAD / independent counters") {
             val v = data.getJSONObject("transport")
             val frames = v.getJSONArray("frames")
-            val outKey = v.bytes("outKey"); val inKey = v.bytes("inKey")
-            val payload = v.bytes("payload"); val header = v.bytes("header")
+            val outKey = v.bytes("outKey")
+            val inKey = v.bytes("inKey")
+            val payload = v.bytes("payload")
+            val header = v.bytes("header")
             for (i in 0 until frames.length()) {
                 val frame = frames.getJSONObject(i)
                 same(CompanionCrypto.aead(true, outKey, frame.bytes("nonce"), payload, header), frame.bytes("ciphertext"))
                 same(CompanionCrypto.aead(false, inKey, frame.bytes("nonce"), frame.bytes("incoming"), header), payload)
-                rejects<SecurityException> { CompanionCrypto.aead(false, inKey, frame.bytes("nonce"), frame.bytes("incoming"), changed(header)) }
+                rejects<SecurityException> {
+                    CompanionCrypto.aead(
+                        false,
+                        inKey,
+                        frame.bytes("nonce"),
+                        frame.bytes("incoming"),
+                        changed(header),
+                    )
+                }
                 rejects<SecurityException> { CompanionCrypto.aead(false, outKey, frame.bytes("nonce"), frame.bytes("incoming"), header) }
-                rejects<SecurityException> { CompanionCrypto.aead(false, inKey, frame.bytes("nonce"), changed(frame.bytes("incoming")), header) }
+                rejects<SecurityException> {
+                    CompanionCrypto.aead(
+                        false,
+                        inKey,
+                        frame.bytes("nonce"),
+                        changed(frame.bytes("incoming")),
+                        header,
+                    )
+                }
                 rejects<SecurityException> { CompanionCrypto.aead(false, inKey, frame.bytes("nonce"), ByteArray(15), header) }
             }
             CompanionCrypto.Session(outKey, inKey).use { session ->
                 for (counter in 0..256) {
                     val encrypted = session.encrypt(payload, header)
-                    val index = when (counter) { 0 -> 0; 1 -> 1; 256 -> 2; else -> -1 }
+                    val index =
+                        when (counter) {
+                            0 -> 0
+                            1 -> 1
+                            256 -> 2
+                            else -> -1
+                        }
                     if (index >= 0) same(encrypted, frames.getJSONObject(index).bytes("ciphertext"))
                 }
                 // Receiving starts at zero even after 257 sends.

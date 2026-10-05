@@ -33,17 +33,23 @@ import fi.goodconsulting.kaukosaadin.device.LgProtocol
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionDiscovery
 import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
-import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import kotlinx.coroutines.launch
 
 /** The saved device the remote drives; each keeps its own pairing and status. */
-internal enum class Target(val label: String, val annunciator: String, val platform: String) {
+internal enum class Target(
+    val label: String,
+    val annunciator: String,
+    val platform: String,
+) {
     Lg("LG TV", "TV", "WEBOS"),
     AppleTv("Apple TV", "ATV", "TVOS"),
 }
 
 /** Remote keys and the command each target sends; LG has no Home or Play/Pause key. */
-internal enum class RemoteKey(val lg: LgProtocol.Action?, val hid: HidCommand) {
+internal enum class RemoteKey(
+    val lg: LgProtocol.Action?,
+    val hid: HidCommand,
+) {
     Up(LgProtocol.Action.Up, HidCommand.Up),
     Down(LgProtocol.Action.Down, HidCommand.Down),
     Left(LgProtocol.Action.Left, HidCommand.Left),
@@ -55,12 +61,18 @@ internal enum class RemoteKey(val lg: LgProtocol.Action?, val hid: HidCommand) {
 }
 
 /** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. */
-internal enum class Direction(val key: RemoteKey, val rotation: Float, val alignment: Alignment, val wedgeStart: Float) {
+internal enum class Direction(
+    val key: RemoteKey,
+    val rotation: Float,
+    val alignment: Alignment,
+    val wedgeStart: Float,
+) {
     Up(RemoteKey.Up, 0f, Alignment.TopCenter, -135f),
     Right(RemoteKey.Right, 90f, Alignment.CenterEnd, -45f),
     Down(RemoteKey.Down, 180f, Alignment.BottomCenter, 45f),
     Left(RemoteKey.Left, 270f, Alignment.CenterStart, 135f),
     ;
+
     val label get() = key.name
 }
 
@@ -89,26 +101,36 @@ fun KaukosaadinApp() {
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<LgClient.Result?>(null) }
     var appleResult by remember { mutableStateOf<CompanionClient.Result?>(null) }
+
     fun run(block: suspend () -> Unit) {
         if (busy) return
         busy = true
-        scope.launch { try { block() } finally { busy = false } }
+        scope.launch {
+            try {
+                block()
+            } finally {
+                busy = false
+            }
+        }
     }
     val lgSaved = client.host.isNotEmpty()
     // Fall back to whichever device is actually saved, e.g. after removing the other.
-    val target = when {
-        selected == Target.Lg && !lgSaved && applePaired -> Target.AppleTv
-        selected == Target.AppleTv && !applePaired && lgSaved -> Target.Lg
-        else -> selected
-    }
+    val target =
+        when {
+            selected == Target.Lg && !lgSaved && applePaired -> Target.AppleTv
+            selected == Target.AppleTv && !applePaired && lgSaved -> Target.Lg
+            else -> selected
+        }
+
     fun openSettings(to: Target) {
         selected = to
         if (to == Target.Lg) lgSettings = true else appleSettings = true
     }
-    val colors = when (theme) {
-        AppTheme.Classic -> if (isSystemInDarkTheme()) DarkColors else LightColors
-        AppTheme.HackerMan -> HackerManColors
-    }
+    val colors =
+        when (theme) {
+            AppTheme.Classic -> if (isSystemInDarkTheme()) DarkColors else LightColors
+            AppTheme.HackerMan -> HackerManColors
+        }
     val window = LocalActivity.current?.window
     val view = LocalView.current
     SideEffect {
@@ -135,9 +157,15 @@ fun KaukosaadinApp() {
                     preferences.edit().putString("layout", it.id).apply()
                 }, onBack = { generalSettings = false })
             } else if (lgSettings) {
-                LgConnectionScreen(innerPadding, client) { result = null; lgSettings = false }
+                LgConnectionScreen(innerPadding, client) {
+                    result = null
+                    lgSettings = false
+                }
             } else if (appleSettings) {
-                AppleTvSetupScreen(innerPadding, apple, discovery) { appleResult = null; appleSettings = false }
+                AppleTvSetupScreen(innerPadding, apple, discovery) {
+                    appleResult = null
+                    appleSettings = false
+                }
             } else if (!lgSaved && !applePaired) {
                 EmptyRemoteScreen(innerPadding, onAdd = ::openSettings, onGeneralSettings = { generalSettings = true })
             } else if (target == Target.Lg) {
@@ -152,8 +180,11 @@ fun KaukosaadinApp() {
                     status = (if (busy) status else result ?: status).message,
                     onTarget = { if (it == Target.Lg || applePaired) selected = it else openSettings(it) },
                     onConnect = {
-                        if (client.host.isEmpty() || client.fingerprint.isEmpty()) lgSettings = true
-                        else run { result = client.connect() }
+                        if (client.host.isEmpty() || client.fingerprint.isEmpty()) {
+                            lgSettings = true
+                        } else {
+                            run { result = client.connect() }
+                        }
                     },
                     onSettings = { lgSettings = true },
                     onGeneralSettings = { generalSettings = true },
@@ -183,7 +214,11 @@ fun KaukosaadinApp() {
 }
 
 @Composable
-private fun EmptyRemoteScreen(contentPadding: PaddingValues, onAdd: (Target) -> Unit, onGeneralSettings: () -> Unit) {
+private fun EmptyRemoteScreen(
+    contentPadding: PaddingValues,
+    onAdd: (Target) -> Unit,
+    onGeneralSettings: () -> Unit,
+) {
     Column(
         Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

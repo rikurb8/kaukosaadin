@@ -27,15 +27,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
-import java.time.format.DateTimeFormatter
-
-/** One status change with the wall-clock time it appeared. */
-internal data class LogLine(val time: String, val text: String)
-
-internal val LogClock: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
-
-/** Newest-first cap: bounds the panel without a second, nested scroll container. */
-internal const val DebugLogLimit = 40
 
 /**
  * Developer layout: flat panels and a live status log instead of the decorative
@@ -72,13 +63,15 @@ internal fun DebugRemoteScreen(
             style = monospace(MaterialTheme.typography.labelMedium),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        DebugPanel(listOf(
-            "target" to target.label,
-            "device" to tvName,
-            "ready" to ready.toString(),
-            "busy" to busy.toString(),
-            "commands" to txCount.toString(),
-        ))
+        DebugPanel(
+            listOf(
+                "target" to target.label,
+                "device" to tvName,
+                "ready" to ready.toString(),
+                "busy" to busy.toString(),
+                "commands" to txCount.toString(),
+            ),
+        )
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             Target.entries.forEachIndexed { index, entry ->
                 SegmentedButton(
@@ -101,7 +94,7 @@ internal fun DebugRemoteScreen(
             TextButton(onClick = onGeneralSettings) { Text("General settings") }
             TextButton(onClick = onWake, enabled = wakeEnabled && !busy) { Text("Wake") }
         }
-        DebugPanel(log.takeLast(DebugLogLimit).reversed().map { it.time to it.text })
+        DebugPanel(log.takeLast(DEBUG_LOG_LIMIT).reversed().map { it.time to it.text })
         RemoteKeys(
             dialSize = MinDialSize,
             target = target,
