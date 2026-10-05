@@ -1,0 +1,46 @@
+"""
+Checks for Kaukosäädin: ktlint and detekt on the toolchain this repository
+pins — JDK 21 and the Gradle wrapper checked in here.
+
+Run it exactly as CI does:
+
+    dagger check
+
+Deliberately narrow to start with: no Android SDK, no device, no emulation, so
+the same check runs natively on a laptop and on the runner. Nothing here needs
+a JDK or a Gradle cache on the host. Unit tests, Android lint and the debug APK
+are not part of this gate yet.
+"""
+type Ci {
+  """
+  The project source on JDK 21, with a shared Gradle cache.
+  """
+  pub gradle(ws: Workspace!): Container! {
+    container
+      .from("eclipse-temurin:21-jdk")
+      .withDirectory(
+        "/src",
+        ws.directory(
+          ".",
+          exclude: ["**/build", "**/.gradle", "**/.kotlin", "**/.git"],
+        ),
+      )
+      .withWorkdir("/src")
+      .withMountedCache("/root/.gradle", cacheVolume("gradle"))
+  }
+
+  """
+  Style and static analysis. There is no baseline, so every finding fails.
+  """
+  pub lint(ws: Workspace!): Void @check {
+    gradle(ws)
+      .withExec([
+        "./gradlew",
+        "--no-daemon",
+        ":app:ktlintCheck",
+        ":app:detekt",
+      ])
+      .sync
+    null
+  }
+}

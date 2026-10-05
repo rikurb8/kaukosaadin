@@ -1,0 +1,8 @@
+# Dagger workspace configuration. `dagger check` runs the checks in the
+# installed modules listed here, locally and in CI.
+#
+# The Dang runtime is built into the engine, so the module needs no SDK
+# install and commits no generated client code.
+
+[modules.ci]
+source = ".dagger/modules/ci"

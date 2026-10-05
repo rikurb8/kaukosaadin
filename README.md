@@ -46,6 +46,8 @@ app and are remembered across restarts.
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/ui/` | Compose UI (screens and components) |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses |
 | `.maestro/` | Maestro flows and workspace configuration |
+| `.dagger/modules/ci/main.dang` | The CI check: a JDK 21 container running ktlint and detekt |
+| `.github/workflows/ci.yml` | GitHub Actions entry point: installs the pinned Dagger CLI and runs the check |
 
 UI and device-network code live in separate packages in the single `app` module. There is
 no DI framework, no multi-module setup, and no generic device abstraction.
@@ -103,6 +105,36 @@ No Android Studio is required; everything below is command line.
 
 APK output: `app/build/outputs/apk/debug/app-debug.apk`. The wrapper is checked in, so a
 fresh checkout only needs the prerequisites above.
+
+## Continuous integration
+
+CI runs `dagger check`, which executes `.dagger/modules/ci/main.dang`: a JDK 21 container
+with the working tree mounted and a shared Gradle cache. Locally, that is the same
+command CI runs:
+
+```bash
+dagger check              # every check in the workspace
+dagger check ci:lint      # just this one
+```
+
+`ci:lint` runs `./gradlew :app:ktlintCheck :app:detekt` — the zero-baseline style and
+static analysis gate — and is deliberately the only thing that runs so far. Unit tests,
+Android lint and the debug APK are **not** covered yet, and Maestro needs a phone, so UI
+checks stay operator-run as described above. Running it locally needs a Dagger CLI release
+that satisfies `engineVersion` and a Docker engine:
+
+```bash
+curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=v1.0.0-beta.7 sh
+dagger check    # under 10 s here once the Gradle cache volume is warm
+```
+
+Because the Android SDK is not part of this check, it runs natively on a laptop and on the
+runner. The first run (and each GitHub-hosted runner) pays the Gradle distribution and
+dependency download; after that the Gradle cache volume makes it seconds.
+
+`.github/workflows/ci.yml` installs the Dagger CLI pinned to the same version as
+`engineVersion` in `.dagger/modules/ci/dagger-module.toml` and runs `dagger check` on
+pushes to `main` and on pull requests.
 
 ## Install and run on the phone
 
