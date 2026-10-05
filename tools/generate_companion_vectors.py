@@ -7,6 +7,7 @@ import hashlib
 import importlib.metadata
 import json
 from pathlib import Path
+import plistlib
 import subprocess
 import sys
 
@@ -14,6 +15,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from pyatv.auth.hap_srp import SRPAuthHandler, hkdf_expand
+from pyatv.protocols.companion import keyed_archiver
+from pyatv.protocols.companion.plist_payloads import get_rti_clear_text_payload, get_rti_input_text_payload
 from pyatv.support.chacha20 import Chacha20Cipher, Chacha20Cipher8byteNonce
 from pyatv.auth.hap_tlv8 import TlvValue, write_tlv
 from pyatv.support import opack
@@ -129,12 +132,26 @@ codec = {"opack": {name: opack.pack(value).hex() for name, value in codec_values
 for name, value in codec_values.items():
     assert opack.unpack(bytes.fromhex(codec["opack"][name]))[0] == value
 
+# RTI keyboard: the Kotlin codec must read pyatv's focus archive and write payloads pyatv reads back.
+rti_uuid = bytes(range(16))
+rti_text = "Hello, tvOS! \u00e4"
+rti_focus = plistlib.dumps(
+    {"$top": {"sessionUUID": plistlib.UID(1), "documentState": plistlib.UID(2)},
+     "$objects": ["$null", rti_uuid, {"docSt": plistlib.UID(3)},
+                  {"contextBeforeInput": plistlib.UID(4)}, rti_text]},
+    fmt=plistlib.PlistFormat.FMT_BINARY, sort_keys=False)
+assert keyed_archiver.read_archive_properties(
+    rti_focus, ["sessionUUID"], ["documentState", "docSt", "contextBeforeInput"]) == (rti_uuid, rti_text)
+rti = {"uuid": rti_uuid.hex(), "text": rti_text, "focus": rti_focus.hex(),
+       "clear": get_rti_clear_text_payload(rti_uuid).hex(),
+       "input": get_rti_input_text_payload(rti_uuid, rti_text).hex()}
+
 result = {"revision": REVISION, "srpPrime": constants.PRIME_3072, "srpGenerator": constants.PRIME_3072_GEN,
           "srp": srp, "ed25519": ed,
           "x25519": {"seed": bytes(range(32)).hex(), "public": raw_public(client).hex(),
                      "peer": raw_public(server).hex(), "shared": shared.hex()},
           "hkdf": hkdf, "pairing": pairing,
-          "codec": codec,
+          "codec": codec, "rti": rti,
           "transport": {"outKey": out_key.hex(), "inKey": in_key.hex(), "header": header.hex(),
                         "payload": payload.hex(), "frames": transport}}
 output = Path(__file__).resolve().parents[1] / "app/src/debug/assets/companion-crypto-vectors.json"

@@ -10,7 +10,9 @@ pair-verify, Keystore credential storage, session startup and HID presses (Menu/
 Home/TV, arrows, Select) are implemented and pass against pinned pyatv's fake Apple TV,
 and pairing + Home/Menu tap, double tap and hold were operator-confirmed on the real
 Apple TV, from the host JVM and from the S25 app (2026-10-04, below); arrows, Select and
-Play/Pause were operator-confirmed from the integrated main remote the same day. Wake is not implemented. The main remote's **LG TV / Apple TV**
+Play/Pause were operator-confirmed from the integrated main remote the same day. Phone-typed
+text is mirrored to the Apple TV's on-screen keyboard with focus-driven auto-open; that path
+passes the fake peer but is **not** real-device-verified. Wake is not implemented. The main remote's **LG TV / Apple TV**
 switch drives the saved Apple TV; LG behavior is unchanged. The crypto gate never uses the
 LAN; the separate discovery screen only scans services. Neither accesses saved LG data.
 
@@ -194,12 +196,16 @@ handling have not been exercised on hardware; no compatibility claim for those c
 `Opack.kt`/`Tlv8.kt` encode byte-identically to pinned pyatv (codec vectors in the same
 JSON). `CompanionLink.kt` is one blocking TCP connection: 4-byte frames (64 KiB cap,
 deadline-bounded reads), PS M1–M6 and PV M1–M4, then `_systemInfo`, `_sessionStart`
-and `_hidC` press/release (each awaits its `_x` response; events are skipped; `_em`
+and `_hidC` press/release (each awaits its `_x` response; `_em`
 fails). Unlike the reference it verifies the M4 server proof, the M6 accessory
 signature and identifier, and the PV M4 status. Any failure closes the link.
 `CompanionClient.kt` stores pyatv-format credentials AES-GCM-wrapped under Keystore
-alias `companion-pairing` (separate from LG), connects + verifies per press, and never
-queues or replays. HID codes: Up 1, Down 2, Left 3, Right 4, **Menu (Back) 5**,
+alias `companion-pairing` (separate from LG) and reuses one verified Companion session.
+Opening or returning to the Apple TV remote preconnects while the activity is resumed;
+leaving the remote or backgrounding closes the connection after any in-flight operation.
+Pairing/forgetting and command failures also discard the session. The next press can
+connect again, but failed presses are never replayed or queued. There is no session setting.
+Persistent-session lifecycle behavior still needs a real-device check. HID codes: Up 1, Down 2, Left 3, Right 4, **Menu (Back) 5**,
 Select 6, **Home (TV) 7**, PlayPause 14 (pinned pyatv `play_pause` sends this HID press). Press actions follow pyatv `_press_button`: tap = down/up,
 double tap = two down/up pairs on the same connection, hold = down, 1 s, up (release
 always attempted). The debug screen maps tap/double-tap/long-press on Menu and Home to
@@ -261,6 +267,45 @@ Operator then used the integrated remote on the real Apple TV (debug APK
 `4987ad17f96ccf0a298ca09733a90b82e3ba42cb637661843adb12349175a8bd`): arrows, OK (Select)
 and Play/Pause reported **working**. Per-key on-screen results were not individually recorded.
 
+## RTI keyboard text input and focus — implemented, fake-peer checked
+
+`CompanionLink` runs a background reader thread once pair-verify succeeds: responses are
+correlated by `_x` and pushed OPACK events (`_t=1`) are no longer discarded. Session startup
+also sends `_tiStart` (pinned pyatv `CompanionAPI._text_input_start`), and `_tiStop` is sent
+best-effort on teardown (pyatv `CompanionAPI.disconnect`).
+
+- `_tiStarted`/`_tiStopped` push the tvOS on-screen-keyboard focus. The archive in
+  `_tiStarted._c._tiD` carries the RTI session UUID and the keyboard's current text; the
+  `_tiStart` reply carries the same archive when the keyboard was already focused before we
+  connected (pyatv's own comment: `_tiStarted` is not sent in that case). Both paths feed
+  `CompanionClient.keyboard`, which drives `AppleTvKeyboardDialog` in `ui/AppleTvSetupScreen.kt`:
+  the field and phone keyboard open on focus, edits are debounced, and dismissal follows
+  `_tiStopped`.
+- `NskArchiver.kt` reads and writes the NSKeyedArchiver binary plist that carries those
+  payloads. Python's `plistlib` does not exist on Android, so it is a bounded from-scratch
+  bplist00 codec: it follows `$top` UID paths like pyatv `read_archive_properties`, and writes
+  pyatv's two fixed RTI templates (`rti_text_operations.py`). Unlike the crypto vectors, the
+  written bytes need not be byte-identical to pyatv's, only plistlib-readable.
+- Every edit is a *set*: one clear (`textToAssert: ''`) then one insert. `_tiC` is an event,
+  so the TV sends no per-keystroke acknowledgment; the app reuses the UUID captured when
+  focus arrived and never retries silently. `CompanionClient.sendText` waits for the session
+  lock instead of dropping edits, and any link failure closes the session like every other
+  operation. 1 s teardown timeouts keep `_tiStop`/`_sessionStop` from delaying a disconnect
+  on a device that ignores them.
+
+Checks: `./gradlew :app:testDebugUnitTest` with the fake-peer env vars — **26 tests, 0 skipped,
+0 failures**. `CompanionArchiverTest` reads the Python-generated focus archive and asserts our
+clear/insert payloads decode back to the same UUID, empty text and full text;
+`CompanionInteropTest.keyboardFocusAndTextMirrorToPeer` drives the fake through `_tiStart`, a
+typed edit and `_tiStopped`/`_tiStarted`, with pyatv's `keyed_archiver` reading our plist back
+into the fake keyboard. `tools/generate_companion_vectors.py` emits the new `rti` vectors;
+regeneration is byte-identical for the existing crypto vectors.
+
+**Not verified:** nothing here has run against a real Apple TV. tvOS 26.6 may use a different
+RTI payload version or rotate the session UUID mid-focus, and the fake only proves
+pinned-pyatv compatibility. Auto-open, the clear+insert round trip and the focus events all
+need a supervised real-device check before this is claimed working.
+
 ## Remaining proof sequence after the on-device gate
 
 1. Record actual Apple TV model/tvOS, LG model/webOS, trusted home-LAN layout/router
@@ -306,3 +351,5 @@ those physical outcomes. Apple TV wake must remain independent of direct LG cont
 The client is now integrated into the main remote (see above). Remaining before closing
 GOO-27: the supervised hardware evidence in step 6 (restart reconnect,
 forget/re-pair, revoked pairing, network failure) from the integrated remote, plus wake.
+Text input additionally needs a supervised real-device check: focus auto-open, typing,
+backspace/paste and dismissal on tvOS 26.6.

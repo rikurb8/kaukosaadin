@@ -22,9 +22,14 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey  # 
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat  # noqa: E402
 from pyatv.auth.hap_srp import hkdf_expand  # noqa: E402
 from pyatv.auth.hap_tlv8 import ErrorCode, TlvValue, read_tlv, write_tlv  # noqa: E402
+from pyatv.const import KeyboardFocusState  # noqa: E402
 from pyatv.protocols.companion.connection import FrameType  # noqa: E402
 from pyatv.support import chacha20  # noqa: E402
-from tests.fake_device.companion import FakeCompanionService, FakeCompanionState  # noqa: E402
+from tests.fake_device.companion import (  # noqa: E402
+    FakeCompanionService,
+    FakeCompanionState,
+    FakeCompanionUseCases,
+)
 
 
 def report(line):
@@ -83,13 +88,40 @@ class ReportingService(FakeCompanionService):
         if self.state.latest_button:
             report(f"BUTTON {self.state.latest_button}")
 
+    def handle__tistart(self, message):
+        super().handle__tistart(message)
+        if self.state.rti_session_uuid is not None:
+            report("TEXT_SESSION")
+
+    def handle__tic(self, message):
+        super().handle__tic(message)
+        if message["_t"] == 1:
+            report(f"TEXT {self.state.rti_text}")
+
+
+async def read_commands(usecases):
+    """Drive focus changes from stdin so the test can exercise the pushed RTI events."""
+    loop = asyncio.get_running_loop()
+    while True:
+        line = await loop.run_in_executor(None, sys.stdin.readline)
+        if not line:
+            return
+        command = line.strip()
+        if command == "focus on":
+            usecases.set_rti_focus_state(KeyboardFocusState.Focused)
+            report("FOCUS on")
+        elif command == "focus off":
+            usecases.set_rti_focus_state(KeyboardFocusState.Unfocused)
+            report("FOCUS off")
+
 
 async def main():
     state = FakeCompanionState()
+    usecases = FakeCompanionUseCases(state)
     loop = asyncio.get_running_loop()
     server = await loop.create_server(lambda: ReportingService(state), "127.0.0.1", 0)
     report(f"PORT {server.sockets[0].getsockname()[1]}")
-    await loop.run_in_executor(None, sys.stdin.read)
+    await read_commands(usecases)
     server.close()
 
 

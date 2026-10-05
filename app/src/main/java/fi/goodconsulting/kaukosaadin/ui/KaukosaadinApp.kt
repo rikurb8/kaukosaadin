@@ -13,14 +13,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
@@ -28,12 +31,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionDiscovery
 import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** The saved device the remote drives; each keeps its own pairing and status. */
 internal enum class Target(
@@ -106,7 +116,7 @@ fun KaukosaadinApp() {
     var selected by rememberSaveable { mutableStateOf(Target.Lg) }
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<LgClient.Result?>(null) }
-    var appleResult by remember { mutableStateOf<CompanionClient.Result?>(null) }
+    var appleConnecting by remember { mutableStateOf(false) }
 
     fun run(block: suspend () -> Unit) {
         if (busy) return
@@ -127,6 +137,29 @@ fun KaukosaadinApp() {
             selected == Target.AppleTv && !applePaired && lgSaved -> Target.Lg
             else -> selected
         }
+
+    val activity = LocalActivity.current
+    val appleRemoteVisible = target == Target.AppleTv && applePaired && !generalSettings && !lgSettings && !appleSettings
+    val remoteVisible by rememberUpdatedState(appleRemoteVisible)
+    LaunchedEffect(activity) {
+        snapshotFlow { remoteVisible }.collectLatest { visible ->
+            if (visible && activity is LifecycleOwner) {
+                activity.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    try {
+                        appleConnecting = true
+                        try {
+                            apple.connect()
+                        } finally {
+                            appleConnecting = false
+                        }
+                        awaitCancellation()
+                    } finally {
+                        withContext(NonCancellable) { apple.disconnect() }
+                    }
+                }
+            }
+        }
+    }
 
     fun openSettings(to: Target) {
         selected = to
@@ -150,6 +183,7 @@ fun KaukosaadinApp() {
     MaterialTheme(colorScheme = colors) {
         LgPinDialog(client)
         AppleTvPinDialog(apple)
+        if (appleRemoteVisible) AppleTvKeyboardDialog(apple)
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -169,7 +203,6 @@ fun KaukosaadinApp() {
                 }
             } else if (appleSettings) {
                 AppleTvSetupScreen(innerPadding, apple, discovery) {
-                    appleResult = null
                     appleSettings = false
                 }
             } else if (!lgSaved && !applePaired) {
@@ -204,15 +237,15 @@ fun KaukosaadinApp() {
                     layout = layout,
                     tvName = apple.name,
                     ready = applePaired,
-                    busy = busy,
+                    busy = busy || appleConnecting,
                     wakeEnabled = false,
-                    status = (if (busy) appleStatus else appleResult ?: appleStatus).message,
+                    status = appleStatus.message,
                     onTarget = { if (it == Target.AppleTv || lgSaved) selected = it else openSettings(it) },
                     onConnect = null,
                     onSettings = { appleSettings = true },
                     onGeneralSettings = { generalSettings = true },
                     onWake = {},
-                    onKey = { key, action -> run { appleResult = apple.press(key.hid, action) } },
+                    onKey = { key, action -> run { apple.press(key.hid, action) } },
                 )
             }
         }

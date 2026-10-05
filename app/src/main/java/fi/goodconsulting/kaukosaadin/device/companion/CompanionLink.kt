@@ -14,6 +14,9 @@ import java.net.SocketTimeoutException
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /** Apple TV remote buttons; codes from pinned pyatv protocols/companion/api.py HidCommand. */
 enum class HidCommand(
@@ -31,6 +34,12 @@ enum class HidCommand(
 
 /** pyatv InputAction: double tap = two press/release pairs on one connection; hold = 1 s down. */
 enum class PressAction { Tap, DoubleTap, Hold }
+
+/** tvOS on-screen keyboard focus pushed by the RTI service (`_tiStarted`/`_tiStopped`). */
+data class CompanionKeyboardState(
+    val focused: Boolean,
+    val text: String,
+)
 
 /** Long-term pairing material, pyatv-compatible ("ltpk:ltsk:atv_id:client_id" hex). Secret: ltsk. */
 internal class CompanionCredentials(
@@ -78,11 +87,12 @@ internal class CompanionRejected(
 ) : IOException(message)
 
 /**
- * One blocking Companion TCP connection, owned by a single operation; adapted from pinned pyatv
+ * One blocking Companion TCP connection, used by one operation at a time; adapted from pinned pyatv
  * (see assets/licenses/pyatv.txt and docs/apple-tv-companion.md). Unlike the reference it verifies
  * the M4 server proof, the accessory setup signature and the pair-verify final status. Any failure
  * leaves the link unusable; callers reconnect instead of retrying or replaying commands.
  */
+@Suppress("TooManyFunctions") // Handshake, session, HID press, RTI text and the reader share one socket.
 internal class CompanionLink(
     input: InputStream,
     output: OutputStream,
@@ -90,10 +100,22 @@ internal class CompanionLink(
 ) : Closeable {
     private val input = input.buffered()
     private val output = output.buffered()
-    private var session: CompanionCrypto.Session? = null
+    private val sendLock = Any()
+
+    // Correlated responses and pushed events are handled by the reader thread once verified.
+    private val pending = ConcurrentHashMap<Long, ArrayBlockingQueue<Reply>>()
+    private var reader: Thread? = null
+    private var keyboardSession: NskTextSession? = null
+    private var textStarted = false
+
+    @Volatile private var session: CompanionCrypto.Session? = null
     private var xid = SecureRandom().nextInt(0x10000).toLong()
     private var localSid = 0L
     private var remoteSid = -1L
+
+    /** Invoked on the reader thread when the TV's on-screen keyboard takes or loses focus. */
+    @Volatile
+    internal var keyboardListener: ((CompanionKeyboardState) -> Unit)? = null
 
     @Volatile
     internal var closed = false
@@ -103,6 +125,15 @@ internal class CompanionLink(
         internal val salt: ByteArray,
         internal val serverPublic: ByteArray,
     )
+
+    /** One correlated reply, or an explicit close so a dead reader wakes waiters immediately. */
+    private sealed interface Reply {
+        class Message(
+            val message: Map<*, *>,
+        ) : Reply
+
+        data object Closed : Reply
+    }
 
     /** PS M1/M2. The TV shows a four-digit PIN after this returns. */
     fun startPairing(): PendingPairing =
@@ -209,6 +240,7 @@ internal class CompanionLink(
                     session = CompanionCrypto.Session(outKey, inKey)
                     outKey.fill(0)
                     inKey.fill(0)
+                    startReader()
                 } finally {
                     shared.fill(0)
                 }
@@ -242,6 +274,15 @@ internal class CompanionLink(
         remoteSid =
             (content?.get("_sid") as? Long)?.takeIf { it in 0..0xFFFFFFFFL }
                 ?: throw ProtocolException("TV did not start a remote session.")
+        // Register the RTI text client so tvOS pushes keyboard-focus events. A device without the
+        // service answers with an error; navigation still works, so only that clean failure is ignored.
+        try {
+            val reply = request("_tiStart", emptyMap())
+            textStarted = true
+            applyKeyboard((reply["_c"] as? Map<*, *>)?.get("_tiD") as? ByteArray)
+        } catch (_: CompanionRejected) {
+            keyboardSession = null
+        }
     }
 
     /** Each down/up waits for the TV's acknowledgment; nothing is retried. */
@@ -274,35 +315,118 @@ internal class CompanionLink(
         }
     }
 
-    /** Best-effort polite shutdown, then close. */
+    /** Best-effort polite shutdown of the text and remote sessions, then close. */
     fun stopSession() {
         if (remoteSid >= 0 && session != null && !closed) {
+            if (textStarted) runCatching { request("_tiStop", emptyMap(), TEARDOWN_TIMEOUT_MS) }
             runCatching {
-                request("_sessionStop", linkedMapOf("_srvT" to SERVICE, "_sid" to ((remoteSid.toULong() shl 32) or localSid.toULong())))
+                request(
+                    "_sessionStop",
+                    linkedMapOf("_srvT" to SERVICE, "_sid" to ((remoteSid.toULong() shl 32) or localSid.toULong())),
+                    TEARDOWN_TIMEOUT_MS,
+                )
             }
         }
         close()
     }
 
+    // Each distinct failure keeps its own message: reject, close, and timeout are told apart.
+    @Suppress("ThrowsCount")
     private fun request(
         identifier: String,
         content: Map<String, Any?>,
+        timeoutMs: Long = TIMEOUT_MS,
     ): Map<*, *> {
         checkNotNull(session) { "Connection not verified." }
         val id = xid++
-        send(E_OPACK, Opack.pack(linkedMapOf("_i" to identifier, "_t" to REQUEST, "_c" to content, "_x" to id)))
-        val deadline = System.nanoTime() + TIMEOUT_NS
-        repeat(MAX_FRAMES) {
-            val (type, payload) = receive(deadline)
-            if (type != E_OPACK) return@repeat
-            val message = Opack.unpack(payload) as? Map<*, *> ?: return@repeat
-            // Events (_t=1) such as SystemStatus may interleave; only our response counts.
-            if (message["_t"] != RESPONSE.toLong() || message["_x"] != id) return@repeat
-            // Like the reference, an _em error message marks failure; its text is peer data and never shown.
-            if ("_em" in message) throw CompanionRejected("Apple TV rejected the ${identifier.trimStart('_')} request.")
-            return message
+        val reply = ArrayBlockingQueue<Reply>(1)
+        pending[id] = reply
+        return try {
+            send(E_OPACK, Opack.pack(linkedMapOf("_i" to identifier, "_t" to REQUEST, "_c" to content, "_x" to id)))
+            when (val received = reply.poll(timeoutMs, TimeUnit.MILLISECONDS)) {
+                is Reply.Message -> {
+                    // Like the reference, an _em error message marks failure; its text is peer data and never shown.
+                    if ("_em" in received.message) {
+                        throw CompanionRejected("Apple TV rejected the ${identifier.trimStart('_')} request.")
+                    }
+                    received.message
+                }
+                Reply.Closed -> throw ProtocolException("Connection closed before the Apple TV answered the request.")
+                null -> throw ProtocolException("Apple TV did not answer the ${identifier.trimStart('_')} request.")
+            }
+        } finally {
+            pending.remove(id)
         }
-        throw ProtocolException("Apple TV did not answer the ${identifier.trimStart('_')} request.")
+    }
+
+    private fun sendEvent(
+        identifier: String,
+        content: Map<String, Any?>,
+    ) {
+        checkNotNull(session) { "Connection not verified." }
+        send(E_OPACK, Opack.pack(linkedMapOf("_i" to identifier, "_t" to EVENT, "_c" to content, "_x" to xid++)))
+    }
+
+    /** Replace the tvOS keyboard text from the focused RTI session: clear, then insert. */
+    fun typeText(text: String) =
+        guarded {
+            val current = keyboardSession ?: throw CompanionRejected("Apple TV is not showing a text field.")
+            sendEvent("_tiC", linkedMapOf("_tiV" to 1, "_tiD" to NskArchiver.clearText(current.uuid)))
+            if (text.isNotEmpty()) {
+                sendEvent("_tiC", linkedMapOf("_tiV" to 1, "_tiD" to NskArchiver.insertText(current.uuid, text)))
+            }
+        }
+
+    private fun startReader() {
+        if (reader != null) return
+        reader =
+            Thread { readLoop() }.apply {
+                isDaemon = true
+                name = "companion-reader"
+                start()
+            }
+    }
+
+    /** Correlate responses by xid and forward push events; the reader owns every post-verify read. */
+    private fun readLoop() {
+        runCatching {
+            while (!closed) {
+                val (type, payload) = receive(0L)
+                if (type == E_OPACK) {
+                    val message = Opack.unpack(payload) as? Map<*, *>
+                    if (message != null) {
+                        when ((message["_t"] as? Number)?.toLong()) {
+                            RESPONSE.toLong() ->
+                                (message["_x"] as? Number)?.toLong()?.let { pending.remove(it)?.offer(Reply.Message(message)) }
+                            EVENT.toLong() ->
+                                (message["_i"] as? String)?.let { name ->
+                                    handleEvent(name, message["_c"] as? Map<*, *> ?: emptyMap<Any?, Any?>())
+                                }
+                        }
+                    }
+                }
+            }
+        }
+        runCatching { close() }
+    }
+
+    private fun handleEvent(
+        identifier: String,
+        content: Map<*, *>,
+    ) {
+        when (identifier) {
+            "_tiStarted" -> applyKeyboard(content["_tiD"] as? ByteArray)
+            "_tiStopped" -> {
+                keyboardSession = null
+                keyboardListener?.invoke(CompanionKeyboardState(false, ""))
+            }
+        }
+    }
+
+    private fun applyKeyboard(archive: ByteArray?) {
+        val found = archive?.let { runCatching { NskArchiver.textSession(it) }.getOrNull() } ?: return
+        keyboardSession = found
+        keyboardListener?.invoke(CompanionKeyboardState(true, found.text))
     }
 
     // A strict handshake validates every frame; each malformed reply keeps its own message.
@@ -344,9 +468,11 @@ internal class CompanionLink(
         val length = payload.size + if (crypto != null && payload.isNotEmpty()) TAG_LENGTH else 0
         if (length > MAX_FRAME) throw ProtocolException("Message too large.")
         val header = byteArrayOf(type.toByte(), (length ushr 16).toByte(), (length ushr 8).toByte(), length.toByte())
-        output.write(header)
-        output.write(if (crypto != null && payload.isNotEmpty()) crypto.encrypt(payload, header) else payload)
-        output.flush()
+        synchronized(sendLock) {
+            output.write(header)
+            output.write(if (crypto != null && payload.isNotEmpty()) crypto.encrypt(payload, header) else payload)
+            output.flush()
+        }
     }
 
     private fun receive(deadline: Long): Pair<Int, ByteArray> {
@@ -359,8 +485,14 @@ internal class CompanionLink(
     }
 
     override fun close() {
-        if (closed) return
-        closed = true
+        synchronized(this) {
+            if (closed) return
+            closed = true
+        }
+        // Wake any in-flight request immediately once the reader can no longer answer.
+        pending.values.forEach { it.offer(Reply.Closed) }
+        keyboardSession = null
+        textStarted = false
         session?.close()
         runCatching {
             socket?.close() ?: run {
@@ -376,6 +508,7 @@ internal class CompanionLink(
         private const val PV_START = 5
         private const val PV_NEXT = 6
         private const val E_OPACK = 8
+        private const val EVENT = 1
         private const val REQUEST = 2
         private const val RESPONSE = 3
         private const val TAG_LENGTH = 16
@@ -383,6 +516,8 @@ internal class CompanionLink(
         private const val MAX_FRAMES = 64
         private const val SERVICE = "com.apple.tvremoteservices"
         private const val HOLD_MS = 1000L // pyatv _press_button default delay
+        private const val TIMEOUT_MS = 5_000L
+        private const val TEARDOWN_TIMEOUT_MS = 1_000L
         private const val TIMEOUT_NS = 5_000_000_000L
         private val PS_MSG05 = "PS-Msg05".toByteArray(Charsets.US_ASCII)
         private val PS_MSG06 = "PS-Msg06".toByteArray(Charsets.US_ASCII)
@@ -449,9 +584,14 @@ private fun readFully(
     val buffer = ByteArray(count)
     var read = 0
     while (read < count) {
-        val remaining = (deadline - System.nanoTime()) / 1_000_000
-        if (remaining <= 0) throw SocketTimeoutException("Apple TV timed out.")
-        socket?.soTimeout = remaining.toInt().coerceAtLeast(1)
+        if (deadline == 0L) {
+            // The reader waits for the next frame until close() breaks the socket.
+            socket?.soTimeout = 0
+        } else {
+            val remaining = (deadline - System.nanoTime()) / 1_000_000
+            if (remaining <= 0) throw SocketTimeoutException("Apple TV timed out.")
+            socket?.soTimeout = remaining.toInt().coerceAtLeast(1)
+        }
         val n = input.read(buffer, read, count - read)
         if (n < 0) throw IOException("Apple TV closed the connection.")
         read += n

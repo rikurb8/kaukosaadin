@@ -21,9 +21,12 @@ persistent socket.
 
 **Add Apple TV** (or **Apple TV settings**) scans for Companion services, pairs with the
 PIN the Apple TV shows and can forget the pairing. Its remote has arrows, **OK**, **BACK**
-(Menu), **HOME** (TV) and **Play/Pause**; BACK/HOME also take double tap and a 1 s hold. Each press
-connects, verifies the saved pairing and waits for the Apple TV's acknowledgment; nothing
-is queued or replayed. There is no Apple TV wake. Pairing and Home/Menu tap, double tap
+(Menu), **HOME** (TV) and **Play/Pause**; BACK/HOME also take double tap and a 1 s hold.
+Opening the Apple TV remote connects once and reuses the verified session while the screen
+is visible; leaving or backgrounding it closes the connection, and failed presses are never
+replayed or queued. When the Apple TV's on-screen keyboard appears, the app opens a text
+field and mirrors what you type to the TV (fake-peer verified, not yet checked on a real
+Apple TV). There is no Apple TV wake. Pairing and Home/Menu tap, double tap
 and hold, arrows, OK and Play/Pause were confirmed on the real Apple TV from the S25. See [Apple TV Companion](docs/apple-tv-companion.md); a debug-only
 crypto gate and discovery screen remain there.
 
@@ -44,7 +47,7 @@ app and are remembered across restarts.
 | --- | --- |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/MainActivity.kt` | Single activity; hosts Compose |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/ui/` | Compose UI (screens and components) |
-| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses |
+| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses, text input |
 | `.maestro/` | Maestro flows and workspace configuration |
 | `.dagger/modules/ci/main.dang` | The CI check: a JDK 21 container running ktlint and detekt |
 | `.github/workflows/ci.yml` | GitHub Actions entry point: installs the pinned Dagger CLI and runs the check |

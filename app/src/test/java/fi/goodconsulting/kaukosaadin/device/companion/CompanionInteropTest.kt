@@ -56,23 +56,30 @@ class CompanionInteropTest {
         assertEquals("PAIRED", next())
         // pyatv must be able to parse what we would save.
         assertEquals(credentials.encode(), CompanionCredentials.decode(credentials.encode()).encode())
-        for (command in listOf(HidCommand.Menu, HidCommand.Home)) {
-            open().use { link ->
-                link.verify(credentials)
-                assertEquals("VERIFIED", next())
-                link.startSession(info, credentials)
-                assertEquals("SESSION com.apple.tvremoteservices", next())
+        open().use { link ->
+            link.verify(credentials)
+            assertEquals("VERIFIED", next())
+            link.startSession(info, credentials)
+            assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TEXT_SESSION", next())
+            // One verified session handles successive presses, including a pause between them.
+            for (command in listOf(HidCommand.Menu, HidCommand.Home, HidCommand.Menu)) {
                 link.press(command)
                 assertEquals("BUTTON ${command.name.lowercase()}", next())
-                link.stopSession()
+                Thread.sleep(100)
             }
+            link.stopSession()
+            assertTrue(link.closed)
+            assertThrows(IllegalStateException::class.java) { link.press(HidCommand.Menu) }
         }
+        // Returning to the remote starts a fresh session using the same saved pairing.
         for (action in listOf(PressAction.DoubleTap, PressAction.Hold)) {
             open().use { link ->
                 link.verify(credentials)
                 assertEquals("VERIFIED", next())
                 link.startSession(info, credentials)
                 assertEquals("SESSION com.apple.tvremoteservices", next())
+                assertEquals("TEXT_SESSION", next())
                 val started = System.nanoTime()
                 link.press(HidCommand.Home, action)
                 repeat(if (action == PressAction.DoubleTap) 2 else 1) { assertEquals("BUTTON home", next()) }
@@ -112,5 +119,34 @@ class CompanionInteropTest {
         }
         assertEquals("PAIRED", next())
         assertEquals("VERIFY_REJECTED", next())
+    }
+
+    @Test fun keyboardFocusAndTextMirrorToPeer() {
+        val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
+        assertEquals("PAIRED", next())
+        open().use { link ->
+            val keyboard = LinkedBlockingQueue<CompanionKeyboardState>()
+            link.keyboardListener = { keyboard.put(it) }
+            link.verify(credentials)
+            assertEquals("VERIFIED", next())
+            link.startSession(info, credentials)
+            assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TEXT_SESSION", next())
+            // tvOS reports focus in the _tiStart reply when the keyboard is already up.
+            assertEquals(CompanionKeyboardState(true, "Fake Companion Keyboard Text"), keyboard.poll(5, TimeUnit.SECONDS))
+            // pyatv reads our NSKeyedArchiver clear/insert payloads back into its own fake keyboard.
+            link.typeText("hello")
+            assertEquals("TEXT ", next())
+            assertEquals("TEXT hello", next())
+            peer.outputStream.write("focus off\n".toByteArray())
+            peer.outputStream.flush()
+            assertEquals("FOCUS off", next())
+            assertEquals(CompanionKeyboardState(false, ""), keyboard.poll(5, TimeUnit.SECONDS))
+            peer.outputStream.write("focus on\n".toByteArray())
+            peer.outputStream.flush()
+            assertEquals("FOCUS on", next())
+            assertEquals(CompanionKeyboardState(true, "hello"), keyboard.poll(5, TimeUnit.SECONDS))
+            link.stopSession()
+        }
     }
 }

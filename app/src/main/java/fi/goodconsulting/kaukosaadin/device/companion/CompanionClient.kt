@@ -13,6 +13,7 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.net.InetAddress
@@ -25,6 +26,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** One Apple TV, one operation at a time; never queues or replays a press. */
 @SuppressLint("UseKtx") // commit() results are checked; KTX edit {} would discard them.
+@Suppress("TooManyFunctions") // Pairing, commands and session ownership share one lock and credential store.
 class CompanionClient(
     context: Context,
 ) {
@@ -38,12 +40,15 @@ class CompanionClient(
     // ponytail: one saved Apple TV, mirroring LgClient; add a list when more are needed.
     private val prefs = appContext.getSharedPreferences("companion", Context.MODE_PRIVATE)
     private val lock = Mutex()
+
+    // Owned exclusively under lock, including lifecycle shutdown.
+    private var link: CompanionLink? = null
     private val mutableStatus =
         MutableStateFlow(
             Result(
                 false,
                 if (prefs.contains("credentials")) {
-                    "Apple TV paired. Presses connect and verify each time."
+                    "Apple TV paired. Open the remote to connect."
                 } else {
                     "Scan, choose your Apple TV, then pair with the PIN it shows."
                 },
@@ -54,6 +59,10 @@ class CompanionClient(
     val paired = mutablePaired.asStateFlow()
     private val mutableAwaitingPin = MutableStateFlow(false)
     val awaitingPin = mutableAwaitingPin.asStateFlow()
+    private val mutableKeyboard = MutableStateFlow<CompanionKeyboardState?>(null)
+
+    /** Non-null while the TV's on-screen keyboard is focused; the UI mirrors typed text to it. */
+    val keyboard = mutableKeyboard.asStateFlow()
 
     @Volatile private var pendingPin: Channel<String>? = null
     val name get() = prefs.getString("name", "")!!
@@ -70,9 +79,11 @@ class CompanionClient(
                     } catch (_: TimeoutCancellationException) {
                         Result(false, "PIN entry timed out. Pair again for a new PIN.")
                     } catch (e: CancellationException) {
+                        closeSession()
                         mutableStatus.value = Result(false, "Apple TV operation cancelled.")
                         throw e
                     } catch (e: Exception) {
+                        closeSession()
                         // Messages are ours (see CompanionLink); never peer text, keys or raw exception detail.
                         Result(
                             false,
@@ -94,6 +105,7 @@ class CompanionClient(
     /** Pair-setup with the PIN shown on the TV, then prove the saved pairing with a fresh pair-verify. */
     suspend fun pair(device: CompanionDiscovery.Device) =
         operation {
+            closeSession()
             mutableStatus.value = Result(false, "Connecting to ${device.name}…")
             val credentials =
                 CompanionLink.open(device.address, device.port).use { link ->
@@ -118,23 +130,55 @@ class CompanionClient(
             Result(true, "Paired with ${device.name} and verified. Navigation buttons are ready.")
         }
 
-    suspend fun press(
-        command: HidCommand,
-        action: PressAction = PressAction.Tap,
-    ) = operation {
+    suspend fun connect() =
+        operation {
+            mutableStatus.value = Result(false, "Connecting to Apple TV…")
+            session()
+            Result(true, "Connected to Apple TV. Navigation buttons are ready.")
+        }
+
+    /** Wait for any in-flight press before closing; never race the link's cipher counters. */
+    suspend fun disconnect() =
+        withContext(Dispatchers.IO) {
+            lock.withLock {
+                closeSession()
+                mutableStatus.value = Result(false, "Apple TV disconnected.")
+            }
+        }
+
+    // Best-effort polite teardown so the TV drops its remote/text sessions; close() is the fallback.
+    private fun closeSession() {
+        val current = link
+        link = null
+        current?.let { runCatching { it.stopSession() } }
+        mutableKeyboard.value = null
+    }
+
+    private fun session(): CompanionLink {
+        link?.let { return it }
         val host = prefs.getString("host", null)
         val credentials = (if (host == null) null else readCredentials()) ?: error("Pair with the Apple TV first.")
         try {
-            // ponytail: connect + verify per press like LgClient; keep a live session only if measured too slow.
-            CompanionLink.open(InetAddress.getByName(host), prefs.getInt("port", 0)).use { link ->
-                link.verify(credentials)
-                link.startSession(clientInfo(), credentials)
-                link.press(command, action)
-                link.stopSession()
+            val opened = CompanionLink.open(InetAddress.getByName(host), prefs.getInt("port", 0))
+            try {
+                opened.keyboardListener = { mutableKeyboard.value = it }
+                opened.verify(credentials)
+                opened.startSession(clientInfo(), credentials)
+                link = opened
+                return opened
+            } finally {
+                if (link !== opened) opened.close()
             }
         } finally {
             credentials.wipe()
         }
+    }
+
+    suspend fun press(
+        command: HidCommand,
+        action: PressAction = PressAction.Tap,
+    ) = operation {
+        session().press(command, action)
         val label =
             when (action) {
                 PressAction.Tap -> command.name
@@ -144,8 +188,29 @@ class CompanionClient(
         Result(true, "$label acknowledged by Apple TV; on-screen result NOT confirmed.")
     }
 
+    /** Mirror the phone's text field to the TV; waits for the lock instead of dropping edits. */
+    @Suppress("TooGenericExceptionCaught") // Any link failure must close the session, never leave it half-open.
+    suspend fun sendText(text: String) =
+        withContext(Dispatchers.IO) {
+            lock.withLock {
+                val current = link ?: return@withLock
+                try {
+                    current.typeText(text)
+                } catch (e: CancellationException) {
+                    closeSession()
+                    throw e
+                } catch (e: Exception) {
+                    closeSession()
+                    // Messages are ours (see CompanionLink); never peer text or raw exception detail.
+                    val known = e is CompanionRejected || e is ProtocolException
+                    mutableStatus.value = Result(false, if (known) e.message ?: TEXT_FAILED else TEXT_UNREACHABLE)
+                }
+            }
+        }
+
     suspend fun forget() =
         operation {
+            closeSession()
             check(prefs.edit().clear().commit()) { "Could not forget pairing." }
             runCatching { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS) }
             mutablePaired.value = false
@@ -248,6 +313,8 @@ class CompanionClient(
     companion object {
         const val DISPLAY_NAME = "Kaukosaadin"
         private const val KEY_ALIAS = "companion-pairing"
+        private const val TEXT_FAILED = "Apple TV could not take the text. Reconnect and try again."
+        private const val TEXT_UNREACHABLE = "Apple TV unreachable while sending text. Reconnect and try again."
 
         /** The Apple TV only shows the PIN screen for this long. */
         private const val PAIRING_TIMEOUT_MS = 90_000L
