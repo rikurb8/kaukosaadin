@@ -9,9 +9,13 @@ import javax.net.ssl.SSLException
  * crash. A failed command is returned once and dropped; nothing retries or replays it.
  */
 internal sealed interface HueResult<out T> {
-    data class Ok<T>(val value: T) : HueResult<T>
+    data class Ok<T>(
+        val value: T,
+    ) : HueResult<T>
 
-    data class Failure(val message: String) : HueResult<Nothing>
+    data class Failure(
+        val message: String,
+    ) : HueResult<Nothing>
 }
 
 /**
@@ -46,20 +50,23 @@ internal object HueErrors {
 
     fun streamRefused(status: Int): String = "The bridge refused the event stream ($status)."
 
-    fun unreadable(): String = "Unexpected reply from the Hue bridge."
+    /** Our own text for a reply that is not a v2 envelope at all. */
+    const val UNREADABLE: String = "Unexpected reply from the Hue bridge."
 
-    fun unreachable(): String = "Hue bridge unreachable. Check the Wi-Fi/LAN and that the bridge is on."
+    /** Our own text for a bridge or light that cannot be reached at all. */
+    const val UNREACHABLE: String = "Hue bridge unreachable. Check the Wi-Fi/LAN and that the bridge is on."
 
-    fun trustChanged(): String = "The bridge's certificate changed or was rejected. Forget the bridge and pair it again."
+    /** Our own text for a certificate the app does not (or no longer) trust. */
+    const val TRUST_CHANGED: String = "The bridge's certificate changed or was rejected. Forget the bridge and pair it again."
 
     /** Our own text for an out-of-range slider value, so a UI bug can never send a bad command. */
-    fun brightnessOutOfRange(): String = "Brightness must be 0–100."
+    const val BRIGHTNESS_OUT_OF_RANGE: String = "Brightness must be 0–100."
 
     /** Maps a stream/command transport fault onto a screen message; never repeats raw exception text. */
     fun transportFailure(e: Exception): String =
         when (e) {
-            is HueStreamException -> e.message ?: unreadable()
-            is CertificateException, is SSLException -> trustChanged()
-            else -> unreachable()
+            is HueStreamException -> e.message ?: UNREADABLE
+            is CertificateException, is SSLException -> TRUST_CHANGED
+            else -> UNREACHABLE
         }
 }

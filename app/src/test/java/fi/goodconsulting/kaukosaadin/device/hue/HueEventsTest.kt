@@ -14,7 +14,11 @@ class HueEventsTest {
     }
 
     @Test fun aDeleteFrameKeepsTheResourceIdentityAndNoState() {
-        val events = HueEvents.decode("""[{"id":"e","type":"delete","creationtime":"2026-01-01T00:00:00Z","data":[{"id":"light-1","type":"light"}]}]""")
+        val events =
+            HueEvents.decode(
+                """[{"id":"e","type":"delete","creationtime":"2026-01-01T00:00:00Z",
+                    "data":[{"id":"light-1","type":"light"}]}]""",
+            )
         assertEquals(
             listOf(HueEvent(action = "delete", resourceId = "light-1", resourceType = "light", on = null, brightness = null)),
             events,
@@ -22,7 +26,11 @@ class HueEventsTest {
     }
 
     @Test fun anAddFrameIsDecoded() {
-        val events = HueEvents.decode("""[{"id":"e","type":"add","creationtime":"t","data":[{"id":"gl-1","type":"grouped_light","on":{"on":false}}]}]""")
+        val events =
+            HueEvents.decode(
+                """[{"id":"e","type":"add","creationtime":"t",
+                    "data":[{"id":"gl-1","type":"grouped_light","on":{"on":false}}]}]""",
+            )
         assertEquals(listOf(HueEvent("add", "gl-1", "grouped_light", on = false, brightness = null)), events)
     }
 

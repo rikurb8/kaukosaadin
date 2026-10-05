@@ -65,8 +65,7 @@ internal object HueCommands {
      * one place that assumption lives: the screen disables brightness while off, and if a physical
      * bridge turns the light on anyway, this body is the only thing that changes.
      */
-    fun brightnessBody(brightness: Int): String =
-        JSONObject().put("dimming", JSONObject().put("brightness", brightness)).toString()
+    fun brightnessBody(brightness: Int): String = JSONObject().put("dimming", JSONObject().put("brightness", brightness)).toString()
 }
 
 /**
@@ -83,8 +82,7 @@ internal class HueApi(
 
     suspend fun rooms(): HueResult<List<HueRoom>> = read(HueProtocol.ROOM_RESOURCE, HueResources::rooms)
 
-    suspend fun groupedLights(): HueResult<List<HueGroupedLight>> =
-        read(HueProtocol.GROUPED_LIGHT_RESOURCE, HueResources::groupedLights)
+    suspend fun groupedLights(): HueResult<List<HueGroupedLight>> = read(HueProtocol.GROUPED_LIGHT_RESOURCE, HueResources::groupedLights)
 
     suspend fun setOn(
         target: HueTarget,
@@ -96,7 +94,7 @@ internal class HueApi(
         target: HueTarget,
         brightness: Int,
     ): HueResult<Unit> {
-        if (brightness !in MIN_BRIGHTNESS..MAX_BRIGHTNESS) return HueResult.Failure(HueErrors.brightnessOutOfRange())
+        if (brightness !in MIN_BRIGHTNESS..MAX_BRIGHTNESS) return HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE)
         return write(target, HueCommands.brightnessBody(brightness))
     }
 
@@ -134,7 +132,9 @@ internal class HueApi(
                     .build()
             // Exactly one execute() call: a failure is reported once and dropped.
             val response = executor.execute(request)
-            val refused = response.status !in HTTP_OK..HTTP_SUCCESS_MAX || HueEnvelope.parse(response.body)?.errorTypes?.isNotEmpty() == true
+            val refused =
+                response.status !in HTTP_OK..HTTP_SUCCESS_MAX ||
+                    HueEnvelope.parse(response.body)?.errorTypes?.isNotEmpty() == true
             if (refused) HueResult.Failure(HueErrors.message(response.status, response.body)) else HueResult.Ok(Unit)
         }
 
@@ -142,9 +142,12 @@ internal class HueApi(
         body: String,
         decode: (HueEnvelope) -> List<T>,
     ): HueResult<List<T>> {
-        val envelope = HueEnvelope.parse(body) ?: return HueResult.Failure(HueErrors.unreadable())
-        if (envelope.errorTypes.isNotEmpty()) return HueResult.Failure(HueErrors.message(HTTP_OK, body))
-        return HueResult.Ok(decode(envelope))
+        val envelope = HueEnvelope.parse(body) ?: return HueResult.Failure(HueErrors.UNREADABLE)
+        return if (envelope.errorTypes.isEmpty()) {
+            HueResult.Ok(decode(envelope))
+        } else {
+            HueResult.Failure(HueErrors.message(HTTP_OK, body))
+        }
     }
 
     // Boundary for every call: blocking I/O off the main thread, and faults become a Failure value.
@@ -173,8 +176,9 @@ internal class HueApi(
          * disables transparent retries so a failed command cannot be replayed by OkHttp either.
          */
         fun of(bridge: HueClient): HueApi? {
-            val host = bridge.host ?: return null
-            val key = bridge.applicationKey ?: return null
+            val host = bridge.host
+            val key = bridge.applicationKey
+            if (host == null || key == null) return null
             return HueApi(host, key, OkHttpHueExecutor(bridge.http(host) { retryOnConnectionFailure(false) }))
         }
     }

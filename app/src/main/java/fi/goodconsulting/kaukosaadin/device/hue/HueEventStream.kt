@@ -8,12 +8,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.BufferedSource
@@ -50,9 +50,8 @@ internal object HueEvents {
         }
 
     private fun decodeEvent(event: JSONObject?): List<HueEvent> {
-        if (event == null) return emptyList()
-        val action = event.optString("type").ifBlank { ACTION_UNKNOWN }
-        val resources = event.optJSONArray("data") ?: return emptyList()
+        val resources = event?.optJSONArray("data") ?: return emptyList()
+        val action = event?.optString("type").orEmpty().ifBlank { ACTION_UNKNOWN }
         return (0 until resources.length()).mapNotNull { index ->
             val resource = resources.optJSONObject(index) ?: return@mapNotNull null
             val id = resource.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -61,8 +60,7 @@ internal object HueEvents {
         }
     }
 
-    private fun on(resource: JSONObject): Boolean? =
-        resource.optJSONObject("on")?.takeIf { it.has("on") }?.optBoolean("on")
+    private fun on(resource: JSONObject): Boolean? = resource.optJSONObject("on")?.takeIf { it.has("on") }?.optBoolean("on")
 
     private fun brightness(resource: JSONObject): Double? =
         resource
@@ -141,7 +139,9 @@ internal interface HueStreamed : Closeable {
 }
 
 /** The bridge refused to open the event stream; carries the app's own text so it is safe to show. */
-internal class HueStreamException(message: String) : IOException(message)
+internal class HueStreamException(
+    message: String,
+) : IOException(message)
 
 /** The real binding: an OkHttp GET whose body is read as a long-lived stream, with no read timeout. */
 internal class OkHttpHueStreamer(
@@ -212,11 +212,13 @@ internal class HueEventStream(
 
     private suspend fun FlowCollector<HueStreamEvent>.emitFrames(streamed: HueStreamed) {
         val reader = SseReader(streamed.source)
-        while (true) {
-            val frame = reader.readFrame() ?: break
-            if (frame.data.isBlank()) continue
-            val events = HueEvents.decode(frame.data)
-            if (events.isNotEmpty()) emit(HueStreamEvent.Frame(frame.id, events))
+        var frame = reader.readFrame()
+        while (frame != null) {
+            if (frame.data.isNotBlank()) {
+                val events = HueEvents.decode(frame.data)
+                if (events.isNotEmpty()) emit(HueStreamEvent.Frame(frame.id, events))
+            }
+            frame = reader.readFrame()
         }
     }
 
@@ -241,8 +243,9 @@ internal class HueEventStream(
 
         /** The event-stream reader for a paired [bridge], or null while it has no stored app key. */
         fun of(bridge: HueClient): HueEventStream? {
-            val host = bridge.host ?: return null
-            val key = bridge.applicationKey ?: return null
+            val host = bridge.host
+            val key = bridge.applicationKey
+            if (host == null || key == null) return null
             val client =
                 bridge.http(host) {
                     readTimeout(STREAM_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)

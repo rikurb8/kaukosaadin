@@ -59,7 +59,11 @@ class HueResourcesTest {
     }
 
     @Test fun theEnvelopeKeepsErrorTypesAndNotTheirDescriptions() {
-        val parsed = HueEnvelope.parse("""{"errors":[{"description":"unauthorized","type":1},{"description":"again","type":3}],"data":[]}""")
+        val parsed =
+            HueEnvelope.parse(
+                """{"errors":[{"description":"unauthorized","type":1},
+                    {"description":"again","type":3}],"data":[]}""",
+            )
         assertEquals(listOf(1, 3), parsed?.errorTypes)
     }
 

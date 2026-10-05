@@ -47,6 +47,7 @@ internal class HueConnection(
     private var lastEventId: String? = null
 
     /** Starts the subscription; idempotent while already live. [resumeFrom] defaults to the last frame id. */
+    @Suppress("TooGenericExceptionCaught") // Single boundary: any stream fault becomes a Failed state, never a throw.
     fun connect(resumeFrom: String? = lastEventId) {
         if (job?.isActive == true) return
         lastEventId = resumeFrom
@@ -131,8 +132,9 @@ internal class HueLighting private constructor(
             bridge: HueClient,
             scope: CoroutineScope,
         ): HueLighting? {
-            val stream = HueEventStream.of(bridge) ?: return null
-            val api = HueApi.of(bridge) ?: return null
+            val stream = HueEventStream.of(bridge)
+            val api = HueApi.of(bridge)
+            if (stream == null || api == null) return null
             return HueLighting(api, HueConnection(scope, stream::updates))
         }
     }

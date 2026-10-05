@@ -94,9 +94,10 @@ internal object HueResources {
         val data = envelope.data
         val items = ArrayList<T>(data.length())
         for (index in 0 until data.length()) {
-            val resource = data.optJSONObject(index) ?: continue
-            if (resource.optString("type") != type || resource.optString("id").isBlank()) continue
-            items += build(resource)
+            val resource = data.optJSONObject(index)
+            if (resource != null && resource.optString("type") == type && resource.optString("id").isNotBlank()) {
+                items += build(resource)
+            }
         }
         return items
     }
@@ -110,8 +111,7 @@ internal object HueResources {
             .trim()
             .ifBlank { resource.optString("id") }
 
-    private fun on(resource: JSONObject): Boolean? =
-        resource.optJSONObject("on")?.takeIf { it.has("on") }?.optBoolean("on")
+    private fun on(resource: JSONObject): Boolean? = resource.optJSONObject("on")?.takeIf { it.has("on") }?.optBoolean("on")
 
     private fun brightness(resource: JSONObject): Double? =
         resource
@@ -123,12 +123,10 @@ internal object HueResources {
     /** Found in `services[]` where `rtype == "grouped_light"`; other service types are ignored. */
     private fun groupedLightId(resource: JSONObject): String? {
         val services = resource.optJSONArray("services") ?: return null
-        for (index in 0 until services.length()) {
-            val service = services.optJSONObject(index) ?: continue
-            if (service.optString("rtype") == HueProtocol.GROUPED_LIGHT_RESOURCE) {
-                return service.optString("rid").takeIf { it.isNotBlank() }
-            }
-        }
-        return null
+        return (0 until services.length())
+            .mapNotNull { services.optJSONObject(it) }
+            .firstOrNull { it.optString("rtype") == HueProtocol.GROUPED_LIGHT_RESOURCE }
+            ?.optString("rid")
+            ?.takeIf { it.isNotBlank() }
     }
 }
