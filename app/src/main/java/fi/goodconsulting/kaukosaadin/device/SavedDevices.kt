@@ -59,7 +59,7 @@ class DeviceStore(
         name: String,
     ) = write(devices.value.map { if (it.id == id) it.copy(name = displayName(name, it.kind)) else it }, selectedId.value)
 
-    fun remove(id: String) = write(devices.value.filterNot { it.id == id }, selectedId.value?.takeUnless { it == id })
+    fun forget(id: String) = write(devices.value.filterNot { it.id == id }, selectedId.value?.takeUnless { it == id })
 
     fun select(id: String) = write(devices.value, id)
 

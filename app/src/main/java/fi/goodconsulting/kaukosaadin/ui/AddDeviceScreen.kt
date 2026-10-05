@@ -154,7 +154,7 @@ fun AddDeviceScreen(
                 if (result.ok && !added) message = SAVE_FAILED
             } finally {
                 applePairing = null
-                if (!added) withContext(NonCancellable) { client.delete() }
+                if (!added) withContext(NonCancellable) { client.forget() }
             }
             if (added) onAdded()
         }
@@ -169,7 +169,7 @@ fun AddDeviceScreen(
         val fingerprint = client.inspect(host)
         if (fingerprint == null) {
             message = client.status.value.message
-            client.delete()
+            client.forget()
         } else {
             message = ""
             lgName = name
@@ -180,7 +180,7 @@ fun AddDeviceScreen(
     fun cancelLg() {
         val candidate = lgCandidate ?: return
         lgCandidate = null
-        run { candidate.client.delete() }
+        run { candidate.client.forget() }
     }
 
     fun pairLg(candidate: LgCandidate) =
@@ -193,7 +193,7 @@ fun AddDeviceScreen(
                 if (result.ok && !added) message = SAVE_FAILED
             } finally {
                 lgCandidate = null
-                if (!added) withContext(NonCancellable) { candidate.client.delete() }
+                if (!added) withContext(NonCancellable) { candidate.client.forget() }
             }
             if (added) onAdded()
         }

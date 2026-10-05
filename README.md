@@ -37,7 +37,7 @@ can **Enter LG TV address** by hand. Tap a device to pair it, and it is saved:
 Any number of devices of either kind can be saved. The picker at the top of the remote switches
 between them and has **Add device…**. The remote opens on the device you last used; until you pick
 one, an Apple TV is the default if one is saved. **Device settings** renames the device and
-**Remove device** (with confirmation) forgets it; for LG it also has **Re-pair** and the optional
+**Forget device** (with confirmation) clears it and its pairing; for LG it also has **Re-pair** and the optional
 Wake-on-LAN settings. Upgrading from the single-slot build drops the old LG/Apple TV pairings:
 pair them again from **Find devices**.
 

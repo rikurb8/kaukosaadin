@@ -33,7 +33,7 @@ import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import kotlinx.coroutines.launch
 
 /**
- * Settings for one saved device: its name and removal for every kind, plus re-pairing and wake for
+ * Settings for one saved device: its name and how to forget it, plus re-pairing and wake for
  * LG. Exactly one of [lg] / [apple] is the device's client, matching its kind.
  */
 @Composable
@@ -50,7 +50,7 @@ fun DeviceSettingsScreen(
     var name by remember(device.id) { mutableStateOf(device.name) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
-    var confirmRemove by remember { mutableStateOf(false) }
+    var confirmForget by remember { mutableStateOf(false) }
 
     fun run(block: suspend () -> Unit) {
         if (busy) return
@@ -63,22 +63,22 @@ fun DeviceSettingsScreen(
             }
         }
     }
-    if (confirmRemove) {
-        RemoveDeviceDialog(
+    if (confirmForget) {
+        ForgetDeviceDialog(
             device = device,
-            onDismiss = { confirmRemove = false },
+            onDismiss = { confirmForget = false },
             onConfirm = {
-                confirmRemove = false
+                confirmForget = false
                 run {
                     val failure =
-                        lg?.delete()?.takeUnless { it.ok }?.message
-                            ?: apple?.delete()?.takeUnless { it.ok }?.message
+                        lg?.forget()?.takeUnless { it.ok }?.message
+                            ?: apple?.forget()?.takeUnless { it.ok }?.message
                     if (failure != null) {
                         message = failure
-                    } else if (store.remove(device.id)) {
+                    } else if (store.forget(device.id)) {
                         onBack()
                     } else {
-                        message = "Could not remove the device. Try again."
+                        message = "Could not forget the device. Try again."
                     }
                 }
             },
@@ -102,7 +102,7 @@ fun DeviceSettingsScreen(
         if (message.isNotEmpty()) Text(message)
         if (lg != null) LgSettings(lg, device, busy, ::run)
         if (apple != null) AppleTvSettings(apple)
-        TextButton(enabled = !busy, onClick = { confirmRemove = true }) { Text("Remove device") }
+        TextButton(enabled = !busy, onClick = { confirmForget = true }) { Text("Forget device") }
         TextButton(onClick = onBack) { Text("Done") }
     }
 }
@@ -155,31 +155,31 @@ private fun AppleTvSettings(client: CompanionClient) {
     Text("Pairing", style = MaterialTheme.typography.titleMedium)
     Text(status.message)
     Text(
-        "To pair again, remove this Apple TV and add it from the scan. There is no Apple TV wake.",
+        "To pair again, forget this Apple TV and add it from the scan. There is no Apple TV wake.",
         style = MaterialTheme.typography.bodySmall,
     )
 }
 
 @Composable
-private fun RemoveDeviceDialog(
+private fun ForgetDeviceDialog(
     device: SavedDevice,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Remove ${device.name}?") },
+        title = { Text("Forget ${device.name}?") },
         text = {
             Text(
                 if (device.kind == DeviceKind.AppleTv) {
-                    "This removes the Apple TV and its pairing from this phone. Also remove " +
+                    "This forgets the Apple TV and its pairing on this phone. Also remove " +
                         "\"${CompanionClient.DISPLAY_NAME}\" in Apple TV Settings › Remotes and Devices."
                 } else {
-                    "This removes the TV, its pairing and wake settings. You'll need to scan and pair it again."
+                    "This forgets the TV, its pairing and wake settings. You'll need to scan and pair it again."
                 },
             )
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Remove") } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Forget") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

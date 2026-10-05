@@ -6,7 +6,7 @@ LG TVs are now saved devices alongside Apple TVs (`device/SavedDevices.kt`): any
 either, each with its own `lg-<id>` prefs. **Find devices** / **Add device** scans SSDP and Companion
 together; tapping an LG TV inspects its certificate and shows one **Trust this TV** dialog
 (name, SHA-256, **Trust & pair**), then the TV's PIN. **Device settings** holds rename, **Re-pair**,
-wake settings and **Remove device**. The pre-rework single `lg` prefs are deleted, not migrated.
+wake settings and **Forget device**. The pre-rework single `lg` prefs are deleted, not migrated.
 The sections below record the original single-TV build and its verification.
 
 ## Main remote integration
