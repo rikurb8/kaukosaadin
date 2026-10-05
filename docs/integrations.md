@@ -1,6 +1,6 @@
 # Device integrations
 
-The app is a single `app` module. A **kind** (LG TV, Apple TV, later Hue) plugs into the shell
+The app is a single `app` module. A **kind** (LG TV, Apple TV, Hue) plugs into the shell
 through one explicitly registered object; the shell never branches on a kind.
 
 ## The seam
@@ -26,6 +26,7 @@ Each kind owns its composables, dialogs, client and per-device storage:
 | --- | --- | --- |
 | LG TV | `ui/LgIntegration.kt` | `device/LgClient.kt` |
 | Apple TV | `ui/AppleTvIntegration.kt` | `device/companion/` |
+| Hue Bridge | `ui/HueIntegration.kt` | `device/hue/` |
 
 ## What the shell owns
 
