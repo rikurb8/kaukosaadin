@@ -48,7 +48,8 @@ main screen instead of `RemoteScreen`/`RemoteKeys`.
 
 ## Forget
 
-`DeviceSettingsScreen` is the one forget path: it calls the controls' `forget()` to clear the kind's
-local state, then `DeviceStore.forget(id)` to drop the saved device. A kind that must clear
-credentials (a Hue bridge username/key, say) implements that in its `DeviceControls.forget()`; it is
-then called from the same place as every other kind, so no per-kind forget code moves into the shell.
+`DeviceStore.forget(id, clearKindState)` is the one forget path: it clears everything the kind
+keeps for the device through the controls, then drops the saved device and its selection. A kind that
+must clear credentials (a Hue bridge username/key, say) implements that in its `DeviceControls.forget()`;
+it is then cleared from the same place as every other kind, so a kind never adds its own forget code
+to the shell.

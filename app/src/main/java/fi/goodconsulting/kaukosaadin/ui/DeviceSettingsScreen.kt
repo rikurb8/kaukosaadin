@@ -64,15 +64,13 @@ internal fun DeviceSettingsScreen(
             onConfirm = {
                 confirmForget = false
                 run {
-                    // The one forget path: the kind clears its local state first, then the saved
-                    // device goes. A kind that fails leaves the saved device in place.
-                    val failure = controls.forget()
+                    // Forget clears everything kept for the device: the kind's local state
+                    // through its controls, then the saved entry. A failure leaves it saved.
+                    val failure = store.forget(device.id) { controls.forget() }
                     if (failure != null) {
                         message = failure
-                    } else if (store.forget(device.id)) {
-                        onBack()
                     } else {
-                        message = "Could not forget the device. Try again."
+                        onBack()
                     }
                 }
             },
