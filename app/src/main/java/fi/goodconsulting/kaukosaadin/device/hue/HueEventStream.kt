@@ -5,9 +5,11 @@ package fi.goodconsulting.kaukosaadin.device.hue
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.flow
@@ -174,13 +176,30 @@ internal class HueEventStream(
     fun updates(fromEventId: String? = null): Flow<HueStreamEvent> =
         flow {
             val streamed = transport.open(request(fromEventId))
-            // Cancelling the collector must unblock a pending socket read, so close as soon as the
-            // collecting job completes; the finally is the ordinary-path close.
-            currentCoroutineContext()[Job]?.invokeOnCompletion { streamed.close() }
+            val collector = this
             try {
-                if (streamed.status != HTTP_OK) throw HueStreamException(HueErrors.streamRefused(streamed.status))
-                emit(HueStreamEvent.Open)
-                emitFrames(streamed)
+                coroutineScope {
+                    // The read below blocks (OkHttp's socket read / okio), so cancelling this
+                    // coroutine cannot unblock it and reach completion on its own: it parks in
+                    // "cancelling" while still blocked. A sibling parked on awaitCancellation closes
+                    // the stream in its finally the instant the collector is cancelled, which is what
+                    // unblocks the read; the outer finally is the ordinary-path close.
+                    val closeOnCancel =
+                        launch {
+                            try {
+                                awaitCancellation()
+                            } finally {
+                                streamed.close()
+                            }
+                        }
+                    try {
+                        if (streamed.status != HTTP_OK) throw HueStreamException(HueErrors.streamRefused(streamed.status))
+                        collector.emit(HueStreamEvent.Open)
+                        collector.emitFrames(streamed)
+                    } finally {
+                        closeOnCancel.cancel()
+                    }
+                }
             } catch (e: IOException) {
                 // Closing the stream to honour cancellation surfaces as an IOException on the blocked
                 // read; report that as cancellation, not as a bridge failure.

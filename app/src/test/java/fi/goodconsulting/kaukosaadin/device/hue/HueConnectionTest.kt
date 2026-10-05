@@ -1,12 +1,11 @@
 package fi.goodconsulting.kaukosaadin.device.hue
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -34,7 +33,7 @@ class HueConnectionTest {
         val channel = Channel<HueStreamEvent>(Channel.UNLIMITED)
         val connection = HueConnection(this) { channel.receiveAsFlow() }
         val received = Channel<HueEvent>(Channel.UNLIMITED)
-        launch { connection.events.collect { received.send(it) } }
+        val collector = launch { connection.events.collect { received.send(it) } }
         yield()
 
         connection.connect()
@@ -43,6 +42,7 @@ class HueConnectionTest {
 
         assertEquals(SAMPLE_EVENT, withTimeout(TIMEOUT_MS) { received.receive() })
         connection.disconnect()
+        withTimeout(TIMEOUT_MS) { collector.cancelAndJoin() }
     }
 
     @Test fun connectResumesFromTheLastFrameId() = runBlocking {
@@ -50,7 +50,7 @@ class HueConnectionTest {
         val channel = Channel<HueStreamEvent>(Channel.UNLIMITED)
         val connection = HueConnection(this) { from -> requested += from; channel.receiveAsFlow() }
         val received = Channel<HueEvent>(Channel.UNLIMITED)
-        launch { connection.events.collect { received.send(it) } }
+        val collector = launch { connection.events.collect { received.send(it) } }
         yield()
 
         connection.connect()
@@ -63,6 +63,7 @@ class HueConnectionTest {
         withTimeout(TIMEOUT_MS) { while (requested.size < 2) delay(1) }
         assertEquals(listOf(null, "5:0"), requested)
         connection.disconnect()
+        withTimeout(TIMEOUT_MS) { collector.cancelAndJoin() }
     }
 
     @Test fun aStreamFailureBecomesAFailedStateNotAThrow() = runBlocking {
@@ -74,38 +75,54 @@ class HueConnectionTest {
     }
 
     @Test fun aFinishedStreamReturnsToDisconnected() = runBlocking {
-        val connection = HueConnection(this) { flowOf(HueStreamEvent.Open) }
+        // Gate the stream's completion so Connected is observed before Disconnected, not raced past.
+        val gate = CompletableDeferred<Unit>()
+        val connection =
+            HueConnection(this) {
+                flow {
+                    emit(HueStreamEvent.Open)
+                    gate.await()
+                }
+            }
 
         connection.connect()
         withTimeout(TIMEOUT_MS) { connection.state.first { it == HueConnectionState.Connected } }
+        gate.complete(Unit)
         withTimeout(TIMEOUT_MS) { connection.state.first { it == HueConnectionState.Disconnected } }
         assertEquals(HueConnectionState.Disconnected, connection.state.value)
     }
 
     @Test fun connectIsIdempotentWhileLive() = runBlocking {
         val calls = AtomicInteger()
+        // A gated flow that stays open until the connection is disconnected, so the second connect
+        // sees a live job. The gate is completed below; nothing waits on it unboundedly.
+        val gate = CompletableDeferred<Unit>()
         val connection =
             HueConnection(this) {
                 calls.incrementAndGet()
-                flow { awaitCancellation() }
+                flow { gate.await() }
             }
 
         connection.connect()
         connection.connect()
-        yield()
+        withTimeout(TIMEOUT_MS) { while (calls.get() < 1) delay(1) }
         assertEquals(1, calls.get())
+        gate.complete(Unit)
         connection.disconnect()
     }
 
     @Test fun disconnectClosesTheStream() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val closed = CompletableDeferred<Unit>()
+        // The stream parks on a gate until disconnect cancels it; the finally then completes `closed`.
+        // The gate is completed at the end so the deferred is not left dangling.
+        val gate = CompletableDeferred<Unit>()
         val connection =
             HueConnection(this) {
                 flow {
                     started.complete(Unit)
                     try {
-                        awaitCancellation()
+                        gate.await()
                     } finally {
                         closed.complete(Unit)
                     }
@@ -116,6 +133,7 @@ class HueConnectionTest {
         withTimeout(TIMEOUT_MS) { started.await() }
         connection.disconnect()
         withTimeout(TIMEOUT_MS) { closed.await() }
+        gate.complete(Unit)
         assertTrue(closed.isCompleted)
         assertEquals(HueConnectionState.Disconnected, connection.state.value)
     }

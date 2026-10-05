@@ -19,7 +19,7 @@ import org.junit.Test
 class HueEventStreamTest {
     @Test fun updatesEmitsOpenThenTheDecodedFrames() = runBlocking {
         val transport = FakeStreamTransport { streamed(200, FRAME_ONE, FRAME_TWO) }
-        val updates = HueEventStream(HOST, KEY, transport).updates().toList()
+        val updates = withTimeout(TIMEOUT_MS) { HueEventStream(HOST, KEY, transport).updates().toList() }
 
         assertEquals(HueStreamEvent.Open, updates[0])
         assertEquals(
@@ -34,7 +34,7 @@ class HueEventStreamTest {
 
     @Test fun updatesRequestsTheEventStreamAcceptingSse() = runBlocking {
         val transport = FakeStreamTransport { streamed(200) }
-        HueEventStream(HOST, KEY, transport).updates().toList()
+        withTimeout(TIMEOUT_MS) { HueEventStream(HOST, KEY, transport).updates().toList() }
 
         val request = transport.requests.single()
         assertEquals("https://$HOST/eventstream/clip/v2", request.url.toString())
@@ -45,14 +45,14 @@ class HueEventStreamTest {
 
     @Test fun updatesResumesWithIfNoneMatch() = runBlocking {
         val transport = FakeStreamTransport { streamed(200) }
-        HueEventStream(HOST, KEY, transport).updates("1690000000:0").toList()
+        withTimeout(TIMEOUT_MS) { HueEventStream(HOST, KEY, transport).updates("1690000000:0").toList() }
 
         assertEquals("1690000000:0", transport.requests.single().header("If-None-Match"))
     }
 
     @Test fun updatesThrowsWhenTheBridgeRefuses() = runBlocking {
         val transport = FakeStreamTransport { streamed(401) }
-        val error = runCatching { HueEventStream(HOST, KEY, transport).updates().toList() }.exceptionOrNull()
+        val error = runCatching { withTimeout(TIMEOUT_MS) { HueEventStream(HOST, KEY, transport).updates().toList() } }.exceptionOrNull()
         assertTrue(error is HueStreamException)
     }
 
@@ -78,7 +78,7 @@ class HueEventStreamTest {
             }
 
         withTimeout(TIMEOUT_MS) { opened.await() }
-        job.cancelAndJoin()
+        withTimeout(TIMEOUT_MS) { job.cancelAndJoin() }
         assertTrue("the stream must be closed on cancellation", closed.isCompleted)
     }
 
