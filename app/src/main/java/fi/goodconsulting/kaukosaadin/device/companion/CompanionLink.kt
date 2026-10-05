@@ -33,6 +33,7 @@ enum class HidCommand(
     Menu(5),
     Select(6),
     Home(7),
+    Sleep(12),
     PlayPause(14),
 }
 
@@ -335,6 +336,13 @@ internal class CompanionLink(
             }
         }
     }
+
+    /** Put the TV to sleep: pyatv `CompanionPower.turn_off` sends the release event only, no down/up pair. */
+    fun sleep() =
+        guarded {
+            check(remoteSid >= 0) { "Session not started." }
+            request("_hidC", linkedMapOf("_hBtS" to 2, "_hidC" to HidCommand.Sleep.code))
+        }
 
     /** Best-effort polite shutdown of the text and remote sessions, then close. */
     fun stopSession() {

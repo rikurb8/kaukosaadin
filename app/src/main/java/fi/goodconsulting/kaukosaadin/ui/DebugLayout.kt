@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 
@@ -37,7 +38,7 @@ internal fun DebugRemoteScreen(
     current: SavedDevice,
     ready: Boolean,
     busy: Boolean,
-    wakeEnabled: Boolean,
+    powerEnabled: Boolean,
     txCount: Int,
     log: List<LogLine>,
     navigationEnabled: Boolean,
@@ -47,7 +48,7 @@ internal fun DebugRemoteScreen(
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onGeneralSettings: () -> Unit,
-    onWake: () -> Unit,
+    onPower: () -> Unit,
     onPress: (RemoteKey, PressAction) -> Unit,
 ) {
     Column(
@@ -83,7 +84,9 @@ internal fun DebugRemoteScreen(
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onGeneralSettings) { Text("General settings") }
-            TextButton(onClick = onWake, enabled = wakeEnabled && !busy) { Text("Wake") }
+            TextButton(onClick = onPower, enabled = powerEnabled && !busy) {
+                Text(if (current.kind == DeviceKind.Lg) "Wake" else "Sleep")
+            }
         }
         DebugPanel(log.takeLast(DEBUG_LOG_LIMIT).reversed().map { it.time to it.text })
         RemoteKeys(

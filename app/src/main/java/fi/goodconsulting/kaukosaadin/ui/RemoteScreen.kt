@@ -69,7 +69,7 @@ internal fun RemoteScreen(
     layout: AppLayout,
     ready: Boolean,
     busy: Boolean,
-    wakeEnabled: Boolean,
+    powerEnabled: Boolean,
     status: String,
     onSelect: (SavedDevice) -> Unit,
     onAddDevice: () -> Unit,
@@ -77,7 +77,7 @@ internal fun RemoteScreen(
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onGeneralSettings: () -> Unit,
-    onWake: () -> Unit,
+    onPower: () -> Unit,
     onKey: (RemoteKey, PressAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,16 +92,13 @@ internal fun RemoteScreen(
         onKey(key, action)
     }
 
-    fun wake() {
+    fun power() {
         txCount++
-        onWake()
+        onPower()
     }
 
     val txFlash = rememberTxFlash(txCount)
-
-    // ponytail: in-memory per remote session; persist to prefs if debugging needs survive restarts.
-    val log = remember { mutableStateListOf<LogLine>() }
-    LaunchedEffect(status) { log += LogLine(LocalTime.now().format(LogClock), status) }
+    val log = rememberStatusLog(status)
 
     if (layout == AppLayout.Debug) {
         DebugRemoteScreen(
@@ -110,7 +107,7 @@ internal fun RemoteScreen(
             current = current,
             ready = ready,
             busy = busy,
-            wakeEnabled = wakeEnabled,
+            powerEnabled = powerEnabled,
             txCount = txCount,
             log = log,
             navigationEnabled = navigationEnabled,
@@ -120,7 +117,7 @@ internal fun RemoteScreen(
             onApps = onApps,
             onSettings = onSettings,
             onGeneralSettings = onGeneralSettings,
-            onWake = { wake() },
+            onPower = { power() },
             onPress = { key, action -> send(key, action) },
         )
         return
@@ -132,9 +129,10 @@ internal fun RemoteScreen(
     RemoteCasing(contentPadding, modifier) { dialSize ->
         PowerDeck(
             ready = ready,
-            wakeEnabled = wakeEnabled && !busy,
+            powerEnabled = powerEnabled && !busy,
+            kind = current.kind,
             txFlash = { txFlash.value },
-            onWake = { wake() },
+            onPower = { power() },
         )
         StatusControls(
             devices = devices,
@@ -171,6 +169,17 @@ private fun rememberTxFlash(txCount: Int): Animatable<Float, AnimationVector1D> 
         }
     }
     return flash
+}
+
+/**
+ * In-memory log of status lines for the debug layout, owned by the caller so it survives
+ * switching layouts. ponytail: per remote session; persist to prefs if it must survive restarts.
+ */
+@Composable
+private fun rememberStatusLog(status: String): List<LogLine> {
+    val log = remember { mutableStateListOf<LogLine>() }
+    LaunchedEffect(status) { log += LogLine(LocalTime.now().format(LogClock), status) }
+    return log
 }
 
 /**
@@ -297,7 +306,7 @@ private fun StatusControls(
     }
 }
 
-/** Wake-only note, speaker grille and model engraving at the tail of the casing. */
+/** Wake-only note for LG; speaker grille and model engraving at the tail of the casing. */
 @Composable
 private fun RemoteFooter(kind: DeviceKind) {
     Column(
@@ -305,13 +314,15 @@ private fun RemoteFooter(kind: DeviceKind) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            if (kind == DeviceKind.Lg) "Wake only · TV power is not monitored" else "No Apple TV wake · power is not monitored",
-            style = MaterialTheme.typography.bodySmall,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (kind == DeviceKind.Lg) {
+            Text(
+                "Wake only · TV power is not monitored",
+                style = MaterialTheme.typography.bodySmall,
+                minLines = 2,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         SpeakerGrille()
         EngravedLabel("MODEL KS-01 · UNIVERSAL")
     }

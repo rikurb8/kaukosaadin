@@ -17,7 +17,9 @@ launchable-app list was fetched from the real Apple TV on 2026-10-05 (36 apps, t
 request, so no operator action was needed), and the operator then launched **Yle Areena** from that
 list and re-confirmed arrows/OK on the same build. Phone-typed
 text is mirrored to the Apple TV's on-screen keyboard with focus-driven auto-open; that path
-passes the fake peer but is **not** real-device-verified. Wake is not implemented. Apple TVs are saved
+passes the fake peer but is **not** real-device-verified. Power-off (Sleep) is implemented,
+fake-peer checked and operator-confirmed on the real Apple TV (2026-10-05, from the integrated
+remote on the S25); wake is not. Apple TVs are saved
 devices like LG TVs: the remote's device picker drives whichever one is selected, and an Apple
 TV is the default until another device is chosen. The crypto gate never uses the
 LAN; the separate discovery screen only scans services. Neither accesses saved LG data.
@@ -212,13 +214,16 @@ leaving the remote or backgrounding closes the connection after any in-flight op
 Pairing/forgetting and command failures also discard the session. The next press can
 connect again, but failed presses are never replayed or queued. There is no session setting.
 Persistent-session lifecycle behavior still needs a real-device check. HID codes: Up 1, Down 2, Left 3, Right 4, **Menu (Back) 5**,
-Select 6, **Home (TV) 7**, PlayPause 14 (pinned pyatv `play_pause` sends this HID press). Press actions follow pyatv `_press_button`: tap = down/up,
+Select 6, **Home (TV) 7**, Sleep 12, PlayPause 14 (pinned pyatv `play_pause` sends this HID press). The power key
+sends Sleep as the release event alone, exactly like pyatv `CompanionPower.turn_off` — no down/up pair, unlike
+the navigation keys. Press actions follow pyatv `_press_button`: tap = down/up,
 double tap = two down/up pairs on the same connection, hold = down, 1 s, up (release
 always attempted). The debug screen maps tap/double-tap/long-press on Menu and Home to
 these; operator-confirmed on the real Apple TV from the S25 (see below).
 
 The main app's **Add device** screen (`ui/AddDeviceScreen.kt`) scans and pairs with the TV's PIN;
-**Device settings** removes it. The main remote, driving an Apple TV, exposes BACK (Menu), HOME (TV), Play/Pause,
+**Device settings** removes it. The main remote, driving an Apple TV, exposes a power key (Sleep; confirmed
+on the real Apple TV 2026-10-05), BACK (Menu), HOME (TV), Play/Pause,
 arrows and OK (Select), with double tap/hold on BACK and HOME. Play/Pause has no
 fake-peer test; it is operator-confirmed on the real Apple TV (below). It replaced the debug-only
 `CompanionRemoteActivity`. Each saved Apple TV now keeps its own `companion-<id>` prefs; all of

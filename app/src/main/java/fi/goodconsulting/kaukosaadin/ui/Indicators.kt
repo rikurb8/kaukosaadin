@@ -36,17 +36,20 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import fi.goodconsulting.kaukosaadin.device.DeviceKind
 
-/** Wake button for the saved TV; the LED indicates registration, not power. */
+/** Power button for the saved TV: wake-only on LG, sleep on the Apple TV. The LED indicates
+ *  registration, not power. */
 @Composable
 internal fun PowerDeck(
     ready: Boolean,
-    wakeEnabled: Boolean,
+    powerEnabled: Boolean,
+    kind: DeviceKind,
     txFlash: () -> Float,
-    onWake: () -> Unit,
+    onPower: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        PowerKey(ready, wakeEnabled, onWake)
+        PowerKey(ready, powerEnabled, kind, onPower)
         Column(
             modifier =
                 Modifier
@@ -71,8 +74,10 @@ internal fun PowerDeck(
 internal fun PowerKey(
     ready: Boolean,
     enabled: Boolean,
+    kind: DeviceKind,
     onClick: () -> Unit,
 ) {
+    val lg = kind == DeviceKind.Lg
     Column(
         modifier = Modifier.width(80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -90,13 +95,13 @@ internal fun PowerKey(
                 Modifier
                     .size(58.dp)
                     .semantics {
-                        contentDescription = "Wake TV"
+                        contentDescription = if (lg) "Wake TV" else "Sleep Apple TV"
                         stateDescription = if (ready) "Registration verified" else "Not connected"
                     },
         ) {
             PowerGlyph(OnPowerRed, Modifier.size(22.dp))
         }
-        EngravedLabel("WAKE")
+        EngravedLabel(if (lg) "WAKE" else "SLEEP")
     }
 }
 

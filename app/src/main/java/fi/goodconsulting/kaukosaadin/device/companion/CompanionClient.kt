@@ -198,6 +198,13 @@ class CompanionClient(
         Result(true, "$label acknowledged by Apple TV; on-screen result NOT confirmed.")
     }
 
+    /** Put the Apple TV to sleep, like pyatv `CompanionPower.turn_off`. Wake is not implemented. */
+    suspend fun sleep() =
+        operation {
+            session().sleep()
+            Result(true, "Sleep acknowledged by Apple TV; on-screen result NOT confirmed.")
+        }
+
     /** Refresh the launchable-app list; the TV reports it only while awake and connected. */
     suspend fun appList() =
         operation {

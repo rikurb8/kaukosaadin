@@ -234,7 +234,7 @@ private fun LgRemote(
         layout = remote.layout,
         ready = ready,
         busy = busy,
-        wakeEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
+        powerEnabled = client.mac.isNotEmpty() && client.broadcast.isNotEmpty() && client.fingerprint.isNotEmpty(),
         status = (if (busy) status else result ?: status).message,
         onSelect = remote.onSelect,
         onAddDevice = remote.onAddDevice,
@@ -242,7 +242,7 @@ private fun LgRemote(
         onApps = null,
         onSettings = remote.onSettings,
         onGeneralSettings = remote.onGeneralSettings,
-        onWake = { run { client.send(LgProtocol.Action.Wake) } },
+        onPower = { run { client.send(LgProtocol.Action.Wake) } },
         onKey = { key, _ -> key.lg?.let { action -> run { client.send(action) } } },
     )
 }
@@ -279,7 +279,7 @@ private fun AppleTvRemote(
         layout = remote.layout,
         ready = paired,
         busy = busy || connecting,
-        wakeEnabled = false,
+        powerEnabled = paired,
         status = status.message,
         onSelect = remote.onSelect,
         onAddDevice = remote.onAddDevice,
@@ -287,7 +287,7 @@ private fun AppleTvRemote(
         onApps = onApps,
         onSettings = remote.onSettings,
         onGeneralSettings = remote.onGeneralSettings,
-        onWake = {},
+        onPower = { run { client.sleep() } },
         onKey = { key, action -> run { client.press(key.hid, action) } },
     )
 }

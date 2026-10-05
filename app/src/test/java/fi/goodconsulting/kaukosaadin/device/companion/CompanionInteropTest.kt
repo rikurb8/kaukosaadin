@@ -69,6 +69,8 @@ class CompanionInteropTest {
                 assertEquals("BUTTON ${command.name.lowercase()}", next())
                 Thread.sleep(100)
             }
+            // Power-off is the release event only (pyatv `CompanionPower.turn_off`); the peer accepts it.
+            link.sleep()
             link.stopSession()
             assertTrue(link.closed)
             assertThrows(IllegalStateException::class.java) { link.press(HidCommand.Menu) }
