@@ -29,7 +29,14 @@ internal class HueClient(
         val message: String,
     )
 
-    private val credentials = HueCredentials(HuePrefsStorage(context.applicationContext, id), HueCredentials::androidKeystoreKey)
+    /**
+     * Everything this bridge keeps on this phone — its address, app key, pin and the operator's
+     * favorites — in the one `hue-<id>` file that [forget] removes wholesale. Ticket #11's favorites
+     * sit in it for exactly that reason.
+     */
+    val storage: HueStorage = HuePrefsStorage(context.applicationContext, id)
+
+    private val credentials = HueCredentials(storage, HueCredentials::androidKeystoreKey)
     private val lock = Mutex()
     private val mutableStatus =
         MutableStateFlow(

@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.hue.HueConnectionState
+import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroupedLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
@@ -47,16 +48,18 @@ private const val MAX_BRIGHTNESS = 100
  * common settings. The bridge is already a saved device, so it opens its own screen instead of adding
  * bulbs to the picker, and nothing here touches the TV remote's keys. [lighting] is null while the
  * bridge has no stored app key. Each light, and each room with a grouped light, has an on/off switch
- * and a brightness slider that sends its one command on release (ticket #10). Ticket #11 favorites
- * [LightingList], and #12 the live subscription to [LightingContent].
+ * and a brightness slider that sends its one command on release (ticket #10), and a favorite control
+ * whose change [favorites] keeps on the phone (ticket #11). #12 adds the live subscription to
+ * [LightingContent].
  */
 @Composable
 internal fun LightingScreen(
     padding: PaddingValues,
     remote: RemoteActions,
     lighting: HueLighting?,
+    favorites: HueFavorites,
 ) {
-    val controller = remember(lighting) { lighting?.let { LightingController(it) } }
+    val controller = remember(lighting, favorites) { lighting?.let { LightingController(it, favorites) } }
     Column(
         Modifier
             .fillMaxSize()
@@ -109,6 +112,8 @@ private fun LightingContent(controller: LightingController) {
             state = state,
             onToggleLight = { light -> scope.launch { controller.toggle(light) } },
             onToggleRoom = { room -> scope.launch { controller.toggle(room) } },
+            onToggleFavoriteLight = { light -> controller.toggleFavorite(light) },
+            onToggleFavoriteRoom = { room -> controller.toggleFavorite(room) },
             onBrightnessDrag = { target, brightness -> controller.dragBrightness(target, brightness) },
             onBrightnessRelease = { target -> scope.launch { controller.releaseBrightness(target) } },
         )
@@ -129,12 +134,17 @@ private fun LightingFailureBanner(message: String?) {
     }
 }
 
-/** The bridge's rooms and lights. A room with a grouped light is controlled as one unit, like a light. */
+/**
+ * The bridge's rooms and lights, favorites first. A room with a grouped light is controlled as one
+ * unit, like a light. The favorite controls write to the phone, not the bridge.
+ */
 @Composable
 private fun LightingList(
     state: LightingState,
     onToggleLight: (HueLight) -> Unit,
     onToggleRoom: (HueRoom) -> Unit,
+    onToggleFavoriteLight: (HueLight) -> Unit,
+    onToggleFavoriteRoom: (HueRoom) -> Unit,
     onBrightnessDrag: (HueTarget, Int) -> Unit,
     onBrightnessRelease: (HueTarget) -> Unit,
 ) {
@@ -146,7 +156,7 @@ private fun LightingList(
     if (state.rooms.isEmpty()) {
         Text("No rooms on this bridge.", style = MaterialTheme.typography.bodySmall)
     } else {
-        state.rooms.forEach { room ->
+        state.orderedRooms.forEach { room ->
             LightingRoomRow(
                 room = room,
                 group = state.groupedLightFor(room),
@@ -154,6 +164,7 @@ private fun LightingList(
                 actions =
                     LightingRowActions(
                         onToggle = { onToggleRoom(room) },
+                        onToggleFavorite = { onToggleFavoriteRoom(room) },
                         onBrightnessDrag = onBrightnessDrag,
                         onBrightnessRelease = onBrightnessRelease,
                     ),
@@ -164,13 +175,14 @@ private fun LightingList(
     if (state.lights.isEmpty()) {
         Text("No lights on this bridge.", style = MaterialTheme.typography.bodySmall)
     } else {
-        state.lights.forEach { light ->
+        state.orderedLights.forEach { light ->
             LightingLightRow(
                 light = light,
                 state = state,
                 actions =
                     LightingRowActions(
                         onToggle = { onToggleLight(light) },
+                        onToggleFavorite = { onToggleFavoriteLight(light) },
                         onBrightnessDrag = onBrightnessDrag,
                         onBrightnessRelease = onBrightnessRelease,
                     ),
@@ -179,9 +191,10 @@ private fun LightingList(
     }
 }
 
-/** The commands one controlled row sends: its switch, and its brightness slider's drag and release. */
+/** The commands one controlled row sends: its switch, its favorite control, and its brightness slider's drag and release. */
 private data class LightingRowActions(
     val onToggle: () -> Unit,
+    val onToggleFavorite: () -> Unit,
     val onBrightnessDrag: (HueTarget, Int) -> Unit,
     val onBrightnessRelease: (HueTarget) -> Unit,
 )
@@ -194,6 +207,7 @@ private data class LightingRowState(
     val draft: Int?,
     val enabled: Boolean,
     val busy: Boolean,
+    val favorite: Boolean,
 )
 
 /**
@@ -216,6 +230,7 @@ private fun LightingLightRow(
                 draft = state.brightnessDrafts[light.id],
                 enabled = state.brightnessEnabled(target),
                 busy = light.id in state.busyTargets,
+                favorite = light.id in state.favoriteLights,
             ),
         target = target,
         actions = actions,
@@ -241,6 +256,7 @@ private fun LightingRoomRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            FavoriteButton(favorite = room.id in state.favoriteRooms, onClick = actions.onToggleFavorite)
         }
         return
     }
@@ -254,13 +270,14 @@ private fun LightingRoomRow(
                 draft = state.brightnessDrafts[group.id],
                 enabled = state.brightnessEnabled(target),
                 busy = group.id in state.busyTargets,
+                favorite = room.id in state.favoriteRooms,
             ),
         target = target,
         actions = actions,
     )
 }
 
-/** A controlled row: its name and on/off switch, and a brightness slider that emits only on release. */
+/** A controlled row: its name and favorite control, its on/off switch, and a brightness slider that emits only on release. */
 @Composable
 private fun LightingRowBody(
     row: LightingRowState,
@@ -274,6 +291,7 @@ private fun LightingRowBody(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(row.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            FavoriteButton(favorite = row.favorite, onClick = actions.onToggleFavorite)
             Switch(checked = row.on, onCheckedChange = { actions.onToggle() }, enabled = !row.busy)
         }
         Slider(
@@ -284,4 +302,17 @@ private fun LightingRowBody(
             valueRange = MIN_BRIGHTNESS.toFloat()..MAX_BRIGHTNESS.toFloat(),
         )
     }
+}
+
+/**
+ * The favorite control of one row: it names the action it performs, so the operator can tell whether
+ * the row is already kept. It is never disabled: keeping a light or room writes to the phone, so it
+ * needs no bridge and no command slot.
+ */
+@Composable
+private fun FavoriteButton(
+    favorite: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick) { Text(if (favorite) "Unfavorite" else "Favorite") }
 }

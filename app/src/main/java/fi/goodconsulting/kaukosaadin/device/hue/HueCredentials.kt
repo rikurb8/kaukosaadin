@@ -38,8 +38,9 @@ internal object HuePairingCodec {
 }
 
 /**
- * The name-value seam [HueCredentials] sits on. The app binds it to a SharedPreferences file; tests
- * bind it to memory, so the credential round-trip is exercised without an Android device.
+ * The name-value seam one bridge's stored settings sit on: [HueCredentials] and [HueFavorites]. The
+ * app binds it to the bridge's SharedPreferences file; tests bind it to memory, so a round-trip is
+ * exercised without an Android device.
  */
 internal interface HueStorage {
     fun get(name: String): String?
@@ -53,7 +54,7 @@ internal interface HueStorage {
     fun clear(): Boolean
 }
 
-/** The bridge's own `hue-<id>` SharedPreferences file, removed wholesale on forget. */
+/** The bridge's own `hue-<id>` SharedPreferences file: its address, app key, pin and favorites, removed wholesale on forget. */
 @SuppressLint("UseKtx") // commit() results are checked; KTX edit {} would discard them.
 internal class HuePrefsStorage(
     context: Context,
@@ -82,8 +83,8 @@ internal class HuePrefsStorage(
 }
 
 /**
- * Everything kept for one saved bridge: its address, the app key the link-button flow minted, and the
- * SPKI pin its certificate was trusted on.
+ * What one saved bridge is paired and trusted with: its address, the app key the link-button flow
+ * minted, and the SPKI pin its certificate was trusted on.
  *
  * The app key is sealed with an Android Keystore AES-GCM key (`allowBackup=false` keeps it on this
  * phone); the pin is a public-key hash and is stored as text. Credentials are read only through
@@ -110,7 +111,10 @@ internal class HueCredentials(
         pairing: HuePairing,
     ): Boolean = storage.put(KEY_HOST, host) && storage.put(KEY_PAIRING, seal(pairing))
 
-    /** Clears the address, app key and pin; the saved-device entry is the caller's. */
+    /**
+     * Clears everything the bridge's own file holds — its address, app key, pin and the operator's
+     * favorites; the saved-device entry is the caller's.
+     */
     fun forget(): Boolean = storage.clear()
 
     private fun pairing(): HuePairing? = storage.get(KEY_PAIRING)?.let(::open)?.let(HuePairingCodec::decode)

@@ -1,12 +1,15 @@
 package fi.goodconsulting.kaukosaadin.ui
 
 import fi.goodconsulting.kaukosaadin.device.hue.HueConnectionState
+import fi.goodconsulting.kaukosaadin.device.hue.HueCredentials
 import fi.goodconsulting.kaukosaadin.device.hue.HueEvent
+import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroupedLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
 import fi.goodconsulting.kaukosaadin.device.hue.HueResult
 import fi.goodconsulting.kaukosaadin.device.hue.HueRoom
+import fi.goodconsulting.kaukosaadin.device.hue.HueStorage
 import fi.goodconsulting.kaukosaadin.device.hue.HueTarget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,7 +30,7 @@ class LightingControllerTest {
     @Test fun loadRendersTheBridgesLightsAndRooms() =
         runBlocking {
             val controller =
-                LightingController(
+                lightingController(
                     FakeHueLighting(
                         lightsResult = { HueResult.Ok(listOf(KITCHEN)) },
                         roomsResult = { HueResult.Ok(listOf(KITCHEN_ROOM)) },
@@ -46,7 +49,7 @@ class LightingControllerTest {
     @Test fun loadRendersTheBridgesGroupedLights() =
         runBlocking {
             val controller =
-                LightingController(
+                lightingController(
                     FakeHueLighting(
                         roomsResult = { HueResult.Ok(listOf(HALL_ROOM)) },
                         groupedLightsResult = { HueResult.Ok(listOf(HALL_GROUP)) },
@@ -60,7 +63,7 @@ class LightingControllerTest {
 
     @Test fun aFailedLoadSurfacesItsMessage() =
         runBlocking {
-            val controller = LightingController(FakeHueLighting(lightsResult = { HueResult.Failure(LIGHTS_FAILURE) }))
+            val controller = lightingController(FakeHueLighting(lightsResult = { HueResult.Failure(LIGHTS_FAILURE) }))
 
             controller.load()
 
@@ -71,7 +74,7 @@ class LightingControllerTest {
     @Test fun aFailedReadKeepsWhatTheOtherReadReturned() =
         runBlocking {
             val controller =
-                LightingController(
+                lightingController(
                     FakeHueLighting(
                         lightsResult = { HueResult.Ok(listOf(KITCHEN)) },
                         roomsResult = { HueResult.Failure(ROOMS_FAILURE) },
@@ -87,7 +90,7 @@ class LightingControllerTest {
     @Test fun aFailedGroupedLightReadKeepsTheLightsAndSurfacesItsMessage() =
         runBlocking {
             val controller =
-                LightingController(
+                lightingController(
                     FakeHueLighting(
                         lightsResult = { HueResult.Ok(listOf(KITCHEN)) },
                         groupedLightsResult = { HueResult.Failure(GROUPS_FAILURE) },
@@ -108,7 +111,7 @@ class LightingControllerTest {
                 gate.await()
                 HueResult.Ok(Unit)
             }
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
 
             val toggle = launch { controller.toggle(KITCHEN) }
@@ -131,7 +134,7 @@ class LightingControllerTest {
                 gate.await()
                 HueResult.Ok(Unit)
             }
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
 
             val first = launch { controller.toggle(KITCHEN) }
@@ -149,7 +152,7 @@ class LightingControllerTest {
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
             fake.onCommand = { _, _ -> HueResult.Failure(TOGGLE_FAILURE) }
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
 
             controller.toggle(KITCHEN)
@@ -167,7 +170,7 @@ class LightingControllerTest {
                     roomsResult = { HueResult.Ok(listOf(KITCHEN_ROOM)) },
                     groupedLightsResult = { HueResult.Ok(listOf(KITCHEN_GROUP)) },
                 )
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
 
             controller.toggle(KITCHEN_ROOM)
@@ -180,7 +183,7 @@ class LightingControllerTest {
     @Test fun aRoomWithNoGroupedLightIsNotControllable() =
         runBlocking {
             val fake = FakeHueLighting()
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
 
             controller.toggle(NO_GROUP_ROOM)
@@ -194,7 +197,7 @@ class LightingControllerTest {
     @Test fun draggingTheBrightnessSliderSendsNothing() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Light(KITCHEN_LAMP.id)
 
@@ -209,7 +212,7 @@ class LightingControllerTest {
     @Test fun releasingTheBrightnessSliderSendsOneCommandAndNoOnOff() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Light(KITCHEN_LAMP.id)
             controller.dragBrightness(target, 35)
@@ -231,7 +234,7 @@ class LightingControllerTest {
                     roomsResult = { HueResult.Ok(listOf(HALL_ROOM)) },
                     groupedLightsResult = { HueResult.Ok(listOf(HALL_GROUP)) },
                 )
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Group(HALL_GROUP.id)
 
@@ -248,7 +251,7 @@ class LightingControllerTest {
     @Test fun brightnessIsNotSentWhileTheLightIsOff() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Light(KITCHEN.id)
 
@@ -269,7 +272,7 @@ class LightingControllerTest {
                     roomsResult = { HueResult.Ok(listOf(KITCHEN_ROOM)) },
                     groupedLightsResult = { HueResult.Ok(listOf(KITCHEN_GROUP)) },
                 )
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Group(KITCHEN_GROUP.id)
 
@@ -291,7 +294,7 @@ class LightingControllerTest {
                 gate.await()
                 HueResult.Ok(Unit)
             }
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Light(KITCHEN_LAMP.id)
             controller.dragBrightness(target, 55)
@@ -310,11 +313,131 @@ class LightingControllerTest {
             assertTrue(state.busyTargets.isEmpty())
         }
 
+    @Test fun aFavoriteLightSurvivesARestart() =
+        runBlocking {
+            val storage = FakeStorage()
+            val beforeRestart =
+                lightingController(
+                    FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) }),
+                    storage,
+                )
+            beforeRestart.load()
+
+            beforeRestart.toggleFavorite(KITCHEN_LAMP)
+
+            // A fresh controller over the same stored bytes, as the screen builds after a restart.
+            val afterRestart =
+                lightingController(
+                    FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) }),
+                    storage,
+                )
+            afterRestart.load()
+
+            assertEquals(setOf(KITCHEN_LAMP.id), afterRestart.state.value.favoriteLights)
+        }
+
+    @Test fun favoriteLightsAreListedFirstWithoutHidingOrRepeatingAnyLight() =
+        runBlocking {
+            val storage = FakeStorage()
+            val lights = listOf(DESK_LAMP, KITCHEN_LAMP, HALL_LAMP)
+            val beforeRestart = lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(lights) }), storage)
+            beforeRestart.load()
+
+            beforeRestart.toggleFavorite(HALL_LAMP)
+
+            val afterRestart = lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(lights) }), storage)
+            afterRestart.load()
+
+            val listed = afterRestart.state.value.orderedLights
+            assertEquals(listOf(HALL_LAMP, DESK_LAMP, KITCHEN_LAMP), listed)
+            // The one list split in two: every light is still here, and none of them twice.
+            assertEquals(lights.size, listed.size)
+            assertEquals(lights.toSet(), listed.toSet())
+        }
+
+    @Test fun favoriteRoomsAreListedFirstWithoutHidingOrRepeatingAnyRoom() =
+        runBlocking {
+            val storage = FakeStorage()
+            val rooms = listOf(KITCHEN_ROOM, HALL_ROOM, NO_GROUP_ROOM)
+            val beforeRestart = lightingController(FakeHueLighting(roomsResult = { HueResult.Ok(rooms) }), storage)
+            beforeRestart.load()
+
+            beforeRestart.toggleFavorite(HALL_ROOM)
+
+            val afterRestart = lightingController(FakeHueLighting(roomsResult = { HueResult.Ok(rooms) }), storage)
+            afterRestart.load()
+
+            val listed = afterRestart.state.value.orderedRooms
+            assertEquals(listOf(HALL_ROOM, KITCHEN_ROOM, NO_GROUP_ROOM), listed)
+            assertEquals(rooms.size, listed.size)
+            assertEquals(rooms.toSet(), listed.toSet())
+        }
+
+    @Test fun unfavoritingRestoresTheBridgesOwnOrder() =
+        runBlocking {
+            val lights = listOf(DESK_LAMP, KITCHEN_LAMP, HALL_LAMP)
+            val controller = lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(lights) }))
+            controller.load()
+            controller.toggleFavorite(HALL_LAMP)
+            assertEquals(listOf(HALL_LAMP, DESK_LAMP, KITCHEN_LAMP), controller.state.value.orderedLights)
+
+            controller.toggleFavorite(HALL_LAMP)
+
+            val state = controller.state.value
+            assertEquals(lights, state.orderedLights)
+            assertTrue(state.favoriteLights.isEmpty())
+        }
+
+    @Test fun aFavoritedLightTheBridgeNoLongerReportsIsListedNowhere() =
+        runBlocking {
+            val storage = FakeStorage()
+            val beforeRestart =
+                lightingController(
+                    FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP, HALL_LAMP)) }),
+                    storage,
+                )
+            beforeRestart.load()
+            beforeRestart.toggleFavorite(KITCHEN_LAMP)
+
+            // The bridge no longer reports the favorited light; the lights it does report still list.
+            val afterRestart =
+                lightingController(
+                    FakeHueLighting(lightsResult = { HueResult.Ok(listOf(HALL_LAMP)) }),
+                    storage,
+                )
+            afterRestart.load()
+
+            val state = afterRestart.state.value
+            assertEquals(listOf(HALL_LAMP), state.orderedLights)
+            assertEquals(setOf(KITCHEN_LAMP.id), state.favoriteLights)
+            assertEquals(null, state.failure)
+        }
+
+    @Test fun forgettingTheBridgeClearsItsFavorites() =
+        runBlocking {
+            val storage = FakeStorage()
+            val controller = lightingController(FakeHueLighting(), storage)
+            controller.toggleFavorite(KITCHEN_LAMP)
+            controller.toggleFavorite(KITCHEN_ROOM)
+            assertTrue(storage.values.isNotEmpty())
+
+            // The forget path the shell calls: HueClient.forget → HueCredentials.forget → the one stored file.
+            assertTrue(HueCredentials(storage, key = { error("A unit test never seals a pairing.") }).forget())
+
+            val afterForget =
+                lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) }), storage)
+            afterForget.load()
+
+            val state = afterForget.state.value
+            assertTrue(state.favoriteLights.isEmpty())
+            assertTrue(state.favoriteRooms.isEmpty())
+        }
+
     @Test fun aFailedBrightnessReleaseSurfacesItsMessage() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })
             fake.brightnessCommand = { _, _ -> HueResult.Failure(BRIGHTNESS_FAILURE) }
-            val controller = LightingController(fake)
+            val controller = lightingController(fake)
             controller.load()
             val target = HueTarget.Light(KITCHEN_LAMP.id)
             controller.dragBrightness(target, 55)
@@ -338,12 +461,40 @@ class LightingControllerTest {
 
         val KITCHEN = HueLight(id = "light-1", name = "Kitchen", on = false, brightness = null)
         val KITCHEN_LAMP = HueLight(id = "light-2", name = "Kitchen lamp", on = true, brightness = 40.0)
+        val HALL_LAMP = HueLight(id = "light-3", name = "Hall lamp", on = true, brightness = 70.0)
+        val DESK_LAMP = HueLight(id = "light-4", name = "Desk lamp", on = false, brightness = null)
         val KITCHEN_ROOM = HueRoom(id = "room-1", name = "Kitchen", groupedLightId = "grouped-1")
         val KITCHEN_GROUP = HueGroupedLight(id = "grouped-1", on = false, brightness = null)
         val HALL_ROOM = HueRoom(id = "room-2", name = "Hall", groupedLightId = "grouped-2")
         val HALL_GROUP = HueGroupedLight(id = "grouped-2", on = true, brightness = 55.0)
         val NO_GROUP_ROOM = HueRoom(id = "room-3", name = "Garage", groupedLightId = null)
         val ROOM_WITH_MISSING_GROUP = HueRoom(id = "room-4", name = "Attic", groupedLightId = "grouped-missing")
+    }
+}
+
+/** A controller over [lighting] whose bridge keeps [storage], so a favorite can be persisted and re-read. */
+private fun lightingController(
+    lighting: HueLighting,
+    storage: HueStorage = FakeStorage(),
+): LightingController = LightingController(lighting, HueFavorites(storage))
+
+/** The in-memory stand-in for one bridge's stored settings file. */
+private class FakeStorage : HueStorage {
+    val values = mutableMapOf<String, String>()
+
+    override fun get(name: String): String? = values[name]
+
+    override fun put(
+        name: String,
+        value: String?,
+    ): Boolean {
+        if (value == null) values.remove(name) else values[name] = value
+        return true
+    }
+
+    override fun clear(): Boolean {
+        values.clear()
+        return true
     }
 }
 
