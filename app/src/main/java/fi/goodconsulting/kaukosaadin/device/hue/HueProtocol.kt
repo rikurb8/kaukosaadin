@@ -21,6 +21,21 @@ object HueProtocol {
     /** The unauthenticated endpoint that returns the app key once the link button has been pressed. */
     const val PAIRING_PATH = "/api"
 
+    /** The v2 resource collection, e.g. `https://<bridge>/clip/v2/resource/light`. */
+    const val RESOURCE_PATH = "/clip/v2/resource"
+
+    /** The v2 server-sent event stream that reports state changes made by any controller. */
+    const val EVENT_STREAM_PATH = "/eventstream/clip/v2"
+
+    /** The resource type of an individual light. */
+    const val LIGHT_RESOURCE = "light"
+
+    /** The resource type of a room, whose on/brightness live on its grouped light. */
+    const val ROOM_RESOURCE = "room"
+
+    /** The resource type that carries a room's (or bridge home's) aggregated on/brightness. */
+    const val GROUPED_LIGHT_RESOURCE = "grouped_light"
+
     /** The request body that asks the bridge for an app key (and an entertainment client key). */
     fun pairingBody(): String =
         JSONObject()
