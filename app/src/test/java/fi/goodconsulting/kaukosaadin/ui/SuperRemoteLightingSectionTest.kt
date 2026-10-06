@@ -298,8 +298,11 @@ class SuperRemoteLightingSectionTest {
     }
 }
 
-/** A [HueLighting] with no bridge: each call returns what the test decides and records what the section sent. */
-private class RecordingHueLighting(
+/**
+ * A [HueLighting] with no bridge: each call returns what the test decides and records what the section
+ * sent. Shared with the cross-section checks, which stand it in for the configured bridge.
+ */
+internal class RecordingHueLighting(
     var groupedLightsResult: suspend () -> HueResult<List<HueGroupedLight>> = { HueResult.Ok(emptyList()) },
 ) : HueLighting {
     /** Every combined on+brightness command, in order. */
