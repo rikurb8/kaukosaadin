@@ -322,7 +322,7 @@ private fun LightingGroupRow(
     )
 }
 
-/** A controlled row: its name and favorite control, its on/off switch, and a brightness slider that emits only on release. */
+/** A controlled row: its name, its on/off switch and favorite control, and a brightness slider that emits only on release. */
 @Composable
 private fun LightingRowBody(
     row: LightingRowState,
@@ -336,8 +336,10 @@ private fun LightingRowBody(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(row.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            FavoriteButton(favorite = row.favorite, onClick = actions.onToggleFavorite)
             Switch(checked = row.on, onCheckedChange = { actions.onToggle() }, enabled = !row.busy)
+            // Last in the row: the favorite control's text changes width, so anywhere earlier it
+            // would shift the switch out from under the operator's finger.
+            FavoriteButton(favorite = row.favorite, onClick = actions.onToggleFavorite)
         }
         Slider(
             value =
