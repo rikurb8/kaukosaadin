@@ -1,0 +1,78 @@
+package fi.goodconsulting.kaukosaadin.device.hue
+
+import java.security.MessageDigest
+import java.security.cert.CertificateException
+import java.security.cert.X509Certificate
+import javax.net.ssl.X509TrustManager
+
+/** The bridge's SPKI SHA-256 pin: hashing the public key rather than the whole cert survives re-issues. */
+internal object HuePin {
+    fun spkiSha256(certificate: X509Certificate): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(certificate.publicKey.encoded)
+            .joinToString("") { "%02x".format(it) }
+
+    fun matches(
+        pinned: String?,
+        certificate: X509Certificate?,
+    ): Boolean {
+        if (pinned.isNullOrBlank() || certificate == null) return false
+        return pinned.equals(spkiSha256(certificate), ignoreCase = true)
+    }
+}
+
+/**
+ * Verifies the leaf certificate of one Hue Bridge.
+ *
+ * The chain is first offered to the platform trust manager, so a bridge serving a properly CA-signed
+ * certificate verifies as ordinary HTTPS and needs no pin. Only when that rejects the chain — the
+ * bridge's self-signed case — does this fall back to a trust-on-first-use SPKI pin: [recordTrust]
+ * persists the presented public key on the first connection to the bridge the operator chose, and
+ * every later connection must present the same key.
+ *
+ * RESIDUAL RISK: trust-on-first-use accepts whatever certificate the bridge presents during that one
+ * pairing window, so an active attacker already on the LAN at that moment can substitute their own
+ * key. All later connections are pinned, so the exposure is that single window. A factory reset or a
+ * bridge keypair rotation changes the key and fails the pin; the bridge must then be re-paired.
+ */
+internal class HueTrustManager(
+    private val system: X509TrustManager,
+    private val storedPin: () -> String?,
+    private val recordTrust: (String) -> Unit,
+) : X509TrustManager {
+    override fun getAcceptedIssuers(): Array<X509Certificate> = system.acceptedIssuers
+
+    override fun checkClientTrusted(
+        chain: Array<out X509Certificate>,
+        authType: String,
+    ): Unit = throw CertificateException("The bridge is never the TLS client.")
+
+    override fun checkServerTrusted(
+        chain: Array<out X509Certificate>,
+        authType: String,
+    ) {
+        if (chain.isEmpty()) throw CertificateException("The bridge presented no certificate.")
+        if (acceptedBySystem(chain, authType)) return
+        val presented = HuePin.spkiSha256(chain[0])
+        val pinned = storedPin()
+        if (pinned.isNullOrBlank()) {
+            recordTrust(presented)
+            return
+        }
+        if (!pinned.equals(presented, ignoreCase = true)) {
+            throw CertificateException("The bridge's certificate changed. Forget and pair it again to re-trust it.")
+        }
+    }
+
+    private fun acceptedBySystem(
+        chain: Array<out X509Certificate>,
+        authType: String,
+    ): Boolean =
+        try {
+            system.checkServerTrusted(chain, authType)
+            true
+        } catch (_: CertificateException) {
+            false
+        }
+}

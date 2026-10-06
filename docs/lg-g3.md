@@ -6,7 +6,7 @@ LG TVs are now saved devices alongside Apple TVs (`device/SavedDevices.kt`): any
 either, each with its own `lg-<id>` prefs. **Find devices** / **Add device** scans SSDP and Companion
 together; tapping an LG TV inspects its certificate and shows one **Trust this TV** dialog
 (name, SHA-256, **Trust & pair**), then the TV's PIN. **Device settings** holds rename, **Re-pair**,
-wake settings and **Remove device**. The pre-rework single `lg` prefs are deleted, not migrated.
+wake settings and **Forget device**. The pre-rework single `lg` prefs are deleted, not migrated.
 The sections below record the original single-TV build and its verification.
 
 ## Main remote integration
@@ -37,7 +37,7 @@ controls and the hard-coded source selector have been removed. No Apple TV conne
 or HDMI-CEC is used by LG wake.
 
 Smoke checks disabled controls and setup/back navigation without changing pairing or
-sending TV commands. The discovery helper checks setup scanning and manual fallback.
+sending TV commands. The discovery helper checks setup scanning and the manual address.
 
 Integration validation: unit tests, debug APK build, lint, updated Maestro smoke and
 LG discovery helper all PASS. Installed on the connected Galaxy S25 with `adb install -r`,
@@ -150,7 +150,7 @@ we did not copy insecure HTTP/WebSocket enrichment to eliminate those fields.
 2. Record G3 model/firmware/webOS version and phone model/Android API. None has been
    observed in this run. Record wired versus Wi-Fi and subnet mask; obtain numeric TV
    IPv4, active interface MAC and **subnet broadcast** from router/network settings.
-   Use automatic discovery/device selection for IPv4, or manual fallback if needed.
+   Use automatic discovery/device selection for IPv4, or the manual address if needed.
    Hostnames are not accepted. Do not commit values.
 3. On the LG, locate **TV On With Mobile / Turn on via Wi-Fi** (often under General →
    External Devices); record the exact menu path and actual enabled state. Check
@@ -222,7 +222,7 @@ may be uncertain: inspect TV before issuing any further command.
   **Found 1 LG TV(s)**. This verifies an LG SSDP advertisement was received, NOT that
   the advertiser was the G3 or that any TV action succeeded.
 - `maestro test --device R3GL204147Z .maestro/helpers/lg-discovery.yaml`: PASS for automatic
-  scan/result display, device selection and manual fallback; no pairing or TV commands.
+  scan/result display, device selection and the manual address; no pairing or TV commands.
   `maestro test --device R3GL204147Z .maestro --include-tags smoke`: PASS (1/1).
 - `TVDiscoveryTest`: PASS for response/service/name parsing and bounded scan/error behavior.
   Desktop UDP routes were unavailable during the check; the scanner surfaced IOException

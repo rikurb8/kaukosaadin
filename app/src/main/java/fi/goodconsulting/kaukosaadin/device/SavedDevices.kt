@@ -16,6 +16,7 @@ enum class DeviceKind(
 ) {
     Lg("LG TV", "TV", "WEBOS"),
     AppleTv("Apple TV", "ATV", "TVOS"),
+    Hue("Hue Bridge", "HUE", "HUE"),
 }
 
 /**
@@ -59,7 +60,21 @@ class DeviceStore(
         name: String,
     ) = write(devices.value.map { if (it.id == id) it.copy(name = displayName(name, it.kind)) else it }, selectedId.value)
 
-    fun remove(id: String) = write(devices.value.filterNot { it.id == id }, selectedId.value?.takeUnless { it == id })
+    /**
+     * Forgets [id]: clears everything its kind keeps for it with [clearKindState], then drops the
+     * saved device and its selection. [clearKindState] clears the kind's own pairing and
+     * credentials, returning null or the failure message; a failure leaves the device saved.
+     * Returns null when the device is forgotten, else the failure message.
+     */
+    suspend fun forget(
+        id: String,
+        clearKindState: suspend () -> String?,
+    ): String? {
+        val failure = clearKindState()
+        if (failure != null) return failure
+        val stored = write(devices.value.filterNot { it.id == id }, selectedId.value?.takeUnless { it == id })
+        return if (stored) null else "Could not forget the device. Try again."
+    }
 
     fun select(id: String) = write(devices.value, id)
 

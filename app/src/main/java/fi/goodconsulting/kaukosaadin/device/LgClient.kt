@@ -157,13 +157,13 @@ class LgClient(
         Result(true, "Certificate trusted. Connect with the TV awake to pair.")
     }
 
-    /** Drops this TV's address, pairing and wake settings; the saved-device entry is the caller's. */
-    suspend fun delete() =
+    /** Forgets this TV: its address, pairing and wake settings; the saved-device entry is the caller's. */
+    suspend fun forget() =
         operation {
-            check(prefs.edit().clear().commit()) { "Could not remove TV. Try again." }
+            check(prefs.edit().clear().commit()) { "Could not forget TV. Try again." }
             appContext.deleteSharedPreferences(prefsName)
             mutableReady.value = false
-            Result(true, "TV removed.")
+            Result(true, "TV forgotten.")
         }
 
     suspend fun saveWake(
@@ -210,19 +210,6 @@ class LgClient(
         }
         return seen
     }
-
-    suspend fun forget() =
-        operation {
-            check(
-                prefs
-                    .edit()
-                    .remove("key")
-                    .remove("fingerprint")
-                    .commit(),
-            ) { "Could not forget pairing." }
-            mutableReady.value = false
-            Result(true, "Pairing and certificate forgotten.")
-        }
 
     /** Saves the certificate the user trusted, then registers, asking for the TV's PIN when it wants one. */
     suspend fun pair(

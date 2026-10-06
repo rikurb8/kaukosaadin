@@ -240,8 +240,8 @@ class CompanionClient(
             }
         }
 
-    /** Drops this Apple TV's address and pairing; the shared Keystore key still protects the others. */
-    suspend fun delete() =
+    /** Forgets this Apple TV: its address and pairing; the shared Keystore key still protects the others. */
+    suspend fun forget() =
         operation {
             closeSession()
             check(prefs.edit().clear().commit()) { "Could not forget pairing." }
