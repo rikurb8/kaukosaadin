@@ -125,9 +125,9 @@ private fun LightingContent(controller: LightingController) {
     }
 }
 
-/** The failure to show the operator: a failed bridge read, command, or live connection. */
+/** The failure shared by the lighting screen and the Super remote's lighting section: a failed bridge read, command or live connection. */
 @Composable
-private fun LightingFailureBanner(message: String?) {
+internal fun LightingFailureBanner(message: String?) {
     if (message == null) return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,

@@ -33,7 +33,6 @@ import fi.goodconsulting.kaukosaadin.device.hue.HueClient
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroup
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
 import fi.goodconsulting.kaukosaadin.device.hue.HueResult
-import kotlinx.coroutines.launch
 
 /** Shown when a saved bridge has no stored app key, so its rooms and zones cannot be read. */
 private const val UNPAIRED_SETUP_BRIDGE =
@@ -78,14 +77,14 @@ internal class SuperRemoteSetup(
     fun chooseBridge(deviceId: String): Boolean {
         val current = read()
         if (current.hueDeviceId == deviceId) return true
-        return write(current.copy(hueDeviceId = deviceId, hueTargetId = null, hueTargetName = null))
+        return write(current.copy(hueDeviceId = deviceId, hueGroupedLightId = null, hueGroupedLightName = null))
     }
 
-    fun chooseLightTarget(
+    fun chooseGroupedLight(
         deviceId: String,
         groupedLightId: String,
         name: String,
-    ): Boolean = write(read().copy(hueDeviceId = deviceId, hueTargetId = groupedLightId, hueTargetName = name))
+    ): Boolean = write(read().copy(hueDeviceId = deviceId, hueGroupedLightId = groupedLightId, hueGroupedLightName = name))
 
     fun chooseShortcuts(shortcuts: List<AppleTvApp>): Boolean = write(read().copy(shortcuts = shortcuts))
 }
@@ -183,15 +182,31 @@ private fun SetupShortcutChoices(
         Text("Choose an Apple TV above first; its report supplies the shortcuts.", style = MaterialTheme.typography.bodyMedium)
         return
     }
-    val apps by client.apps.collectAsState()
-    val status by client.status.collectAsState()
-    val scope = rememberCoroutineScope()
+    // AppleTvSessionHost owns the RESUMED-scoped connect/disconnect: the link opens with this screen
+    // and closes on leaving or backgrounding, a Back out of setup included. Reads dispatch through it.
+    AppleTvSessionHost(client) { session ->
+        ShortcutChoices(client = client, session = session, chosen = chosen, setup = setup, save = save)
+    }
+}
+
+/** The chosen TV's reported apps, read through [session] so the link follows this screen's lifetime. */
+@Composable
+private fun ShortcutChoices(
+    client: CompanionClient,
+    session: AppleTvSession,
+    chosen: List<AppleTvApp>,
+    setup: SuperRemoteSetup,
+    save: (Boolean) -> Unit,
+) {
+    val apps by session.apps.collectAsState()
+    val status by session.status.collectAsState()
+    val refresh = { session.run { refreshShortcuts(client, setup, save) } }
     // The TV reports its apps only while awake; refresh on open and whenever the chosen TV changes.
-    LaunchedEffect(client) { refreshShortcuts(client, setup, save) }
+    LaunchedEffect(session) { refresh() }
     Text(status.message, style = MaterialTheme.typography.bodySmall)
     if (apps.isEmpty()) {
         Text("No apps reported yet. The Apple TV may be asleep or off the network.", style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = { scope.launch { refreshShortcuts(client, setup, save) } }) { Text("Refresh apps") }
+        Button(onClick = refresh) { Text("Refresh apps") }
         return
     }
     apps.forEach { app ->
@@ -253,9 +268,9 @@ private fun SetupTargetChoices(
         else ->
             groups.forEach { group ->
                 val id = group.groupedLightId ?: return@forEach
-                val label = if (id == chosen.hueTargetId) "✓ ${group.name}" else group.name
+                val label = if (id == chosen.hueGroupedLightId) "✓ ${group.name}" else group.name
                 OutlinedButton(
-                    onClick = { save(setup.chooseLightTarget(bridge.id, id, group.name)) },
+                    onClick = { save(setup.chooseGroupedLight(bridge.id, id, group.name)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(label) }
             }

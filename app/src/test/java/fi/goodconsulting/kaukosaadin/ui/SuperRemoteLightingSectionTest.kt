@@ -240,12 +240,12 @@ class SuperRemoteLightingSectionTest {
         }
 
     @Test fun aForgottenBridgeOrUnsetTargetHasNoPresetTargetSoNothingIsSent() {
-        val bindings = SuperRemoteBindings(hueDeviceId = BRIDGE.id, hueTargetId = TARGET.id)
+        val bindings = SuperRemoteBindings(hueDeviceId = BRIDGE.id, hueGroupedLightId = TARGET.id)
 
         // The bridge was forgotten: the bindings resolve to no lighting, and the section commands nothing.
         assertNull(presetTarget(bindings.resolve(listOf(OTHER_BRIDGE)).lighting, RecordingHueLighting()))
         // No room or zone was chosen yet, so there is no grouped light to command.
-        assertNull(presetTarget(bindings.copy(hueTargetId = null).resolve(listOf(BRIDGE)).lighting, RecordingHueLighting()))
+        assertNull(presetTarget(bindings.copy(hueGroupedLightId = null).resolve(listOf(BRIDGE)).lighting, RecordingHueLighting()))
     }
 
     @Test fun aBridgeWithNoClientHasNoPresetTargetSoNothingIsSent() {
@@ -294,7 +294,7 @@ class SuperRemoteLightingSectionTest {
         val ON_GROUP = HueGroupedLight(id = "grouped-1", on = true, brightness = 100.0)
         val OFF_GROUP = HueGroupedLight(id = "grouped-1", on = false, brightness = null)
         val OTHER_GROUP = HueGroupedLight(id = "grouped-2", on = true, brightness = 55.0)
-        val lighting = SuperRemoteLighting(BRIDGE, SuperRemoteLightTarget(TARGET.id, "Living room"))
+        val lighting = SuperRemoteLighting(BRIDGE, SuperRemoteGroupedLight(TARGET.id, "Living room"))
     }
 }
 

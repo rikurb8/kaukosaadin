@@ -45,7 +45,7 @@ internal fun SuperRemoteAppleTvSection(
             onPress = { key, action ->
                 dispatchAppleTvPress(session, { command, press -> client.press(command, press) }, key, action)
             },
-            onReconnect = { dispatchAppleTvReconnect(session) { client.connect() } },
+            onReconnect = { session.run { client.connect() } },
         )
     }
 }
@@ -73,16 +73,6 @@ internal fun appleTvControlsEnabled(
     connecting: Boolean,
     busy: Boolean,
 ) = paired && !connecting && !busy
-
-/**
- * Reconnect for the Super remote's Apple TV controls: asks [connect] to restore the verified link,
- * through [session]'s single-in-flight guard, and does nothing else. It restores readiness only, so
- * a reconnect never repeats the press that failed — a new press is a new operator action.
- */
-internal fun dispatchAppleTvReconnect(
-    session: AppleTvSession,
-    connect: suspend () -> Unit,
-) = session.run { connect() }
 
 /**
  * The configured Apple TV's name, its live readiness and the shared keypad. The keys grey out while

@@ -21,9 +21,9 @@ internal data class SuperRemoteBindings(
     val appleTvDeviceId: String? = null,
     val hueDeviceId: String? = null,
     /** The grouped-light id of the chosen room or zone on [hueDeviceId]. */
-    val hueTargetId: String? = null,
+    val hueGroupedLightId: String? = null,
     /** The chosen room's or zone's name, shown until the bridge reports what the target is called now. */
-    val hueTargetName: String? = null,
+    val hueGroupedLightName: String? = null,
     /** The app shortcuts in the order they are shown, each with the bundle id it launches. */
     val shortcuts: List<AppleTvApp> = emptyList(),
 ) {
@@ -42,10 +42,10 @@ internal data class SuperRemoteBindings(
     /** The bound bridge and target, or null when the bridge was forgotten or no grouped light was chosen. */
     private fun lighting(devices: List<SavedDevice>): SuperRemoteLighting? {
         val bridge = devices.firstOrNull { it.kind == DeviceKind.Hue && it.id == hueDeviceId }
-        val targetId = hueTargetId?.takeIf { it.isNotBlank() }
+        val targetId = hueGroupedLightId?.takeIf { it.isNotBlank() }
         if (bridge == null || targetId == null) return null
-        val name = hueTargetName?.takeIf { it.isNotBlank() } ?: targetId
-        return SuperRemoteLighting(bridge, SuperRemoteLightTarget(targetId, name))
+        val name = hueGroupedLightName?.takeIf { it.isNotBlank() } ?: targetId
+        return SuperRemoteLighting(bridge, SuperRemoteGroupedLight(targetId, name))
     }
 
     companion object {
@@ -53,8 +53,8 @@ internal data class SuperRemoteBindings(
             JSONObject()
                 .put(APPLE_TV, bindings.appleTvDeviceId)
                 .put(HUE_DEVICE, bindings.hueDeviceId)
-                .put(HUE_TARGET, bindings.hueTargetId)
-                .put(HUE_TARGET_NAME, bindings.hueTargetName)
+                .put(HUE_GROUPED_LIGHT, bindings.hueGroupedLightId)
+                .put(HUE_GROUPED_LIGHT_NAME, bindings.hueGroupedLightName)
                 .put(SHORTCUTS, JSONArray(bindings.shortcuts.map { JSONObject().put(BUNDLE_ID, it.bundleId).put(NAME, it.name) }))
                 .toString()
 
@@ -69,8 +69,8 @@ internal data class SuperRemoteBindings(
             return SuperRemoteBindings(
                 appleTvDeviceId = stored.id(APPLE_TV),
                 hueDeviceId = stored.id(HUE_DEVICE),
-                hueTargetId = stored.id(HUE_TARGET),
-                hueTargetName = stored.id(HUE_TARGET_NAME),
+                hueGroupedLightId = stored.id(HUE_GROUPED_LIGHT),
+                hueGroupedLightName = stored.id(HUE_GROUPED_LIGHT_NAME),
                 shortcuts = shortcuts(stored.optJSONArray(SHORTCUTS)),
             )
         }
@@ -90,8 +90,8 @@ internal data class SuperRemoteBindings(
 
         private const val APPLE_TV = "appleTvDeviceId"
         private const val HUE_DEVICE = "hueDeviceId"
-        private const val HUE_TARGET = "hueTargetId"
-        private const val HUE_TARGET_NAME = "hueTargetName"
+        private const val HUE_GROUPED_LIGHT = "hueGroupedLightId"
+        private const val HUE_GROUPED_LIGHT_NAME = "hueGroupedLightName"
         private const val SHORTCUTS = "shortcuts"
         private const val BUNDLE_ID = "bundleId"
         private const val NAME = "name"
@@ -99,7 +99,7 @@ internal data class SuperRemoteBindings(
 }
 
 /** The room or zone's grouped light the lighting section commands, and the name to show for it. */
-internal data class SuperRemoteLightTarget(
+internal data class SuperRemoteGroupedLight(
     val id: String,
     val name: String,
 )
@@ -107,7 +107,7 @@ internal data class SuperRemoteLightTarget(
 /** The lighting section's bound bridge and the room or zone chosen on it. */
 internal data class SuperRemoteLighting(
     val bridge: SavedDevice,
-    val target: SuperRemoteLightTarget,
+    val target: SuperRemoteGroupedLight,
 )
 
 /** What the Super remote's sections are bound to once their bindings are resolved against the saved devices. */

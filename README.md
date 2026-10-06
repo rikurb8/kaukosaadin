@@ -88,8 +88,10 @@ app and are remembered across restarts.
 
 - **Theme**: **Classic** (the original palette, following system light/dark mode) or
   **Hacker man** (a green-on-black demo theme).
-- **Layout**: **Standard** (the full casing, wheel and VFD display) or **Debug** (flat panels
-  with a live timestamped status log, for development and troubleshooting).
+- **Layout**: **Standard** (the full casing, wheel and VFD display), **Debug** (flat panels
+  with a live timestamped status log, for development and troubleshooting) or **Super remote**
+  (one saved Apple TV's app shortcuts and controls with one saved room's or zone's lighting on
+  one screen).
 
 ## Repository layout
 

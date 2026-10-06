@@ -95,7 +95,7 @@ class SuperRemoteAppleTvSectionTest {
             // A press went out; the link later dropped. The operator reconnects.
             dispatchAppleTvPress(session, fake::press, RemoteKey.Home, PressAction.Tap)
             withTimeout(TIMEOUT_MS) { session.busy.first { !it } }
-            dispatchAppleTvReconnect(session, fake::connect)
+            session.run { fake.connect() }
             withTimeout(TIMEOUT_MS) { session.busy.first { !it } }
             yield()
 

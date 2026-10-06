@@ -56,7 +56,8 @@ internal fun SuperRemoteAppsRow(
  * shortcut the TV no longer reports says so and routes to [onSetup] instead of launching anything.
  * The buttons are disabled while a tap is in flight, so a repeated tap is dropped instead of queueing
  * a second launch. The TV's app report is refreshed when the row appears and on every return to it;
- * a return refreshes names only and never re-sends a launch.
+ * a return refreshes names only and never re-sends a launch. The refresh awaits its read inside the
+ * RESUMED block, so backgrounding cancels it rather than leaving it running out of the screen's sight.
  */
 @Composable
 private fun ShortcutButtons(
@@ -142,7 +143,15 @@ internal class SuperRemoteAppLaunch(
     val busy: StateFlow<Boolean> = mutableBusy.asStateFlow()
 
     /** Reads the TV's current app report. Never sends a launch. */
-    fun refresh() = run { refreshApps() }
+    suspend fun refresh() {
+        if (mutableBusy.value) return
+        mutableBusy.value = true
+        try {
+            refreshApps()
+        } finally {
+            mutableBusy.value = false
+        }
+    }
 
     /** Asks the TV to open [stored]'s app: the bundle id is the stored one, never a substitute. */
     fun launch(stored: AppleTvApp) {

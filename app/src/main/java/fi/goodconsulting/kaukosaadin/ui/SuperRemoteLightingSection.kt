@@ -3,11 +3,8 @@ package fi.goodconsulting.kaukosaadin.ui
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -16,7 +13,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -81,7 +77,7 @@ private fun SuperRemoteLightingPresets(
         }
     }
 
-    SuperRemoteLightingFailure(failureMessage(connection, state))
+    LightingFailureBanner(failureMessage(connection, state))
     Text("${lighting.target.name} · ${lighting.bridge.name}", style = MaterialTheme.typography.bodyMedium)
     if (state.targetMissing(target)) {
         Text(
@@ -109,20 +105,6 @@ private fun SuperRemoteLightingPresets(
             onClick = { scope.launch { controller.reconnect(target) } },
             enabled = !unavailable,
         ) { Text("Reconnect") }
-    }
-}
-
-/** The failure to show for this section alone: a failed bridge read, command or live connection. */
-@Composable
-private fun SuperRemoteLightingFailure(message: String?) {
-    if (message == null) return
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(message, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

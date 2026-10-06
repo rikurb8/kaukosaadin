@@ -17,8 +17,8 @@ class SuperRemoteBindingsTest {
         SuperRemoteBindings(
             appleTvDeviceId = appleTv.id,
             hueDeviceId = bridge.id,
-            hueTargetId = "grouped-1",
-            hueTargetName = "Living room",
+            hueGroupedLightId = "grouped-1",
+            hueGroupedLightName = "Living room",
             shortcuts = listOf(youtube, areena),
         )
 
@@ -33,8 +33,8 @@ class SuperRemoteBindingsTest {
         val stored = JSONObject(SuperRemoteBindings.encode(configured))
         assertEquals("atv-1", stored.getString("appleTvDeviceId"))
         assertEquals("hue-1", stored.getString("hueDeviceId"))
-        assertEquals("grouped-1", stored.getString("hueTargetId"))
-        assertEquals("Living room", stored.getString("hueTargetName"))
+        assertEquals("grouped-1", stored.getString("hueGroupedLightId"))
+        assertEquals("Living room", stored.getString("hueGroupedLightName"))
         val shortcut = stored.getJSONArray("shortcuts").getJSONObject(0)
         assertEquals("com.google.ios.youtube", shortcut.getString("bundleId"))
         assertEquals("YouTube", shortcut.getString("name"))
@@ -42,8 +42,8 @@ class SuperRemoteBindingsTest {
 
     @Test fun handWrittenStorageDecodes() {
         val stored =
-            """{"appleTvDeviceId":"atv-9","hueDeviceId":"hue-9","hueTargetId":"grouped-9",""" +
-                """"hueTargetName":"Kitchen","shortcuts":[{"bundleId":"fi.yle.areena","name":"Yle Areena"}]}"""
+            """{"appleTvDeviceId":"atv-9","hueDeviceId":"hue-9","hueGroupedLightId":"grouped-9",""" +
+                """"hueGroupedLightName":"Kitchen","shortcuts":[{"bundleId":"fi.yle.areena","name":"Yle Areena"}]}"""
         assertEquals(
             SuperRemoteBindings("atv-9", "hue-9", "grouped-9", "Kitchen", listOf(areena)),
             SuperRemoteBindings.decode(stored),
@@ -55,7 +55,7 @@ class SuperRemoteBindingsTest {
         assertEquals(unconfigured, SuperRemoteBindings.decode(null))
         assertEquals(unconfigured, SuperRemoteBindings.decode("not json"))
         assertEquals(unconfigured, SuperRemoteBindings.decode("[]"))
-        assertEquals(unconfigured, SuperRemoteBindings.decode("""{"hueDeviceId":null,"hueTargetName":null}"""))
+        assertEquals(unconfigured, SuperRemoteBindings.decode("""{"hueDeviceId":null,"hueGroupedLightName":null}"""))
         assertEquals(unconfigured, SuperRemoteBindings.decode("""{"shortcuts":"junk"}"""))
         assertEquals(unconfigured, SuperRemoteBindings.decode("""{"shortcuts":[42,"junk",null]}"""))
         // A shortcut without a bundle id is dropped: there would be no app to launch.
@@ -76,7 +76,7 @@ class SuperRemoteBindingsTest {
         val targets = configured.resolve(listOf(appleTv, bridge))
         assertEquals(appleTv, targets.appleTv)
         assertEquals(bridge, targets.lighting?.bridge)
-        assertEquals(SuperRemoteLightTarget("grouped-1", "Living room"), targets.lighting?.target)
+        assertEquals(SuperRemoteGroupedLight("grouped-1", "Living room"), targets.lighting?.target)
     }
 
     @Test fun aForgottenOrWrongKindDeviceResolvesToMissing() {
@@ -101,15 +101,15 @@ class SuperRemoteBindingsTest {
         val changedKind = SavedDevice(bridge.id, DeviceKind.AppleTv, "Olohuone", "192.168.1.30")
         assertNull(configured.resolve(listOf(appleTv, changedKind)).lighting)
         // No room or zone was chosen yet, so there is no grouped light to command.
-        assertNull(configured.copy(hueTargetId = null).resolve(listOf(appleTv, bridge)).lighting)
-        assertNull(configured.copy(hueTargetId = "  ").resolve(listOf(appleTv, bridge)).lighting)
+        assertNull(configured.copy(hueGroupedLightId = null).resolve(listOf(appleTv, bridge)).lighting)
+        assertNull(configured.copy(hueGroupedLightId = "  ").resolve(listOf(appleTv, bridge)).lighting)
     }
 
     @Test fun aTargetWithoutAStoredNameIsShownByItsId() {
         val devices = listOf(appleTv, bridge)
-        val blank = configured.copy(hueTargetName = "  ").resolve(devices)
-        assertEquals(SuperRemoteLightTarget("grouped-1", "grouped-1"), blank.lighting?.target)
-        val absent = configured.copy(hueTargetName = null).resolve(devices)
-        assertEquals(SuperRemoteLightTarget("grouped-1", "grouped-1"), absent.lighting?.target)
+        val blank = configured.copy(hueGroupedLightName = "  ").resolve(devices)
+        assertEquals(SuperRemoteGroupedLight("grouped-1", "grouped-1"), blank.lighting?.target)
+        val absent = configured.copy(hueGroupedLightName = null).resolve(devices)
+        assertEquals(SuperRemoteGroupedLight("grouped-1", "grouped-1"), absent.lighting?.target)
     }
 }
