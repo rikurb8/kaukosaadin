@@ -48,7 +48,7 @@ internal class HueClient(
             ),
         )
 
-    /** The current setup message, shown by the bridge's setup and remote screens. */
+    /** The current pairing message, shown by the bridge's Settings screen. */
     val status: StateFlow<Result> = mutableStatus.asStateFlow()
 
     /** The trust layer #8 configures its API client with; there is no trust-all alternative. */
