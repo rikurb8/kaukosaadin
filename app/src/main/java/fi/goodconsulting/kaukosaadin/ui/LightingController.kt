@@ -1,17 +1,21 @@
 package fi.goodconsulting.kaukosaadin.ui
 
 import fi.goodconsulting.kaukosaadin.device.hue.HueConnectionState
+import fi.goodconsulting.kaukosaadin.device.hue.HueEvent
 import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroupedLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
+import fi.goodconsulting.kaukosaadin.device.hue.HueProtocol
 import fi.goodconsulting.kaukosaadin.device.hue.HueResult
 import fi.goodconsulting.kaukosaadin.device.hue.HueRoom
 import fi.goodconsulting.kaukosaadin.device.hue.HueTarget
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 
 /** Shown when a favorite could not be written; the list stays as it was stored, so nothing is claimed that is not there. */
 private const val FAVORITES_FAILURE = "Could not save the favorites on this phone."
@@ -45,7 +49,9 @@ internal data class LightingState(
  * [LightingState.failure]; nothing throws, and no command is queued or replayed. [toggleFavorite]
  * keeps a light or room among the favorites, written to the bridge's own storage, and the screen
  * lists those first through [LightingState.orderedLights] and [LightingState.orderedRooms] without
- * hiding or repeating any of them. #12's live stream extends this, not the screen.
+ * hiding or repeating any of them. [live] is the screen's visible lifetime: it refreshes [state] on
+ * entry and merges the bridge's own changes into it until it is cancelled, so a switch or another
+ * app shows up here without ever becoming a command.
  */
 internal class LightingController(
     private val lighting: HueLighting,
@@ -59,10 +65,29 @@ internal class LightingController(
     /** Everything the lighting screen shows. */
     val state: StateFlow<LightingState> = mutableState.asStateFlow()
 
-    /** The bridge's live-subscription state; the screen renders its failure (ticket #12 drives it). */
+    /** The bridge's live-subscription state; the screen renders its failure. */
     val connection: StateFlow<HueConnectionState> = lighting.state
 
-    /** Fetches lights, rooms and grouped lights once, when the screen opens; a failed read keeps what the others returned. */
+    /**
+     * Runs for as long as the lighting screen is visible: refreshes the bridge's state on entry, then
+     * applies the bridge's own changes until the caller cancels this. Cancelling it — leaving the
+     * screen or backgrounding the app — closes the live subscription in a `finally`, so the next entry
+     * connects and reads the bridge again. Nothing here sends a command.
+     */
+    suspend fun live() {
+        try {
+            lighting.connect()
+            load()
+            lighting.events.collect { event -> mutableState.update { it.updatedBy(event) } }
+        } finally {
+            withContext(NonCancellable) { lighting.disconnect() }
+        }
+    }
+
+    /**
+     * Fetches lights, rooms and grouped lights; [live] calls it on every entry to the screen, so
+     * coming back reads the bridge again. A failed read keeps what the others returned.
+     */
     suspend fun load() {
         mutableState.update { it.copy(loading = true, failure = null) }
         val lights = lighting.lights()
@@ -79,9 +104,14 @@ internal class LightingController(
         }
     }
 
-    /** Sends one on/off command for [light]; a tap while that light's command is in flight is ignored. */
+    /**
+     * Sends one on/off command for [light]; a tap while that light's command is in flight is ignored.
+     * The value to send is the opposite of what the bridge last reported for the light, read here at
+     * send time: a live event that changed the light meanwhile would make the rendered [light] lie.
+     */
     suspend fun toggle(light: HueLight) {
-        sendOn(HueTarget.Light(light.id), !light.on)
+        val current = mutableState.value.lights.firstOrNull { it.id == light.id } ?: return
+        sendOn(HueTarget.Light(light.id), !current.on)
     }
 
     /** Sends one on/off command for [room]'s grouped light; a room the bridge reports no grouped light for is left alone. */
@@ -205,6 +235,36 @@ internal class LightingController(
 
 /** The visible failure text of a read, or null when it returned a value. */
 private fun HueResult<*>.failure(): String? = (this as? HueResult.Failure)?.message
+
+/**
+ * The message the lighting screen's failure banner shows: a broken live subscription first, then the
+ * last read or command failure. [LightingController.live] is what makes the connection failure reach
+ * the banner at all.
+ */
+internal fun failureMessage(
+    connection: HueConnectionState,
+    state: LightingState,
+): String? = (connection as? HueConnectionState.Failed)?.message ?: state.failure
+
+/**
+ * [this] with the change [event] carries applied: only the resource the event names changes, and only
+ * the fields the event carries. An event for a resource the screen does not track, or a type it does
+ * not show, changes nothing.
+ */
+private fun LightingState.updatedBy(event: HueEvent): LightingState =
+    when (event.resourceType) {
+        HueProtocol.LIGHT_RESOURCE -> copy(lights = lights.map { it.updatedBy(event) })
+        HueProtocol.GROUPED_LIGHT_RESOURCE -> copy(groupedLights = groupedLights.map { it.updatedBy(event) })
+        else -> this
+    }
+
+/** [this] with the on/off and brightness [event] carries, when the event names this light. */
+private fun HueLight.updatedBy(event: HueEvent): HueLight =
+    if (id == event.resourceId) copy(on = event.on ?: on, brightness = event.brightness ?: brightness) else this
+
+/** [this] with the on/off and brightness [event] carries, when the event names this grouped light. */
+private fun HueGroupedLight.updatedBy(event: HueEvent): HueGroupedLight =
+    if (id == event.resourceId) copy(on = event.on ?: on, brightness = event.brightness ?: brightness) else this
 
 /**
  * Whether the operator may adjust [target]'s brightness: only while the bridge reports it as on and
