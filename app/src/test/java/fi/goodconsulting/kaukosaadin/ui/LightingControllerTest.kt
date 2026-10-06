@@ -373,6 +373,66 @@ class LightingControllerTest {
             assertEquals(rooms.toSet(), listed.toSet())
         }
 
+    @Test fun unfavoritingRestoresTheBridgesOwnOrder() =
+        runBlocking {
+            val lights = listOf(DESK_LAMP, KITCHEN_LAMP, HALL_LAMP)
+            val controller = lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(lights) }))
+            controller.load()
+            controller.toggleFavorite(HALL_LAMP)
+            assertEquals(listOf(HALL_LAMP, DESK_LAMP, KITCHEN_LAMP), controller.state.value.orderedLights)
+
+            controller.toggleFavorite(HALL_LAMP)
+
+            val state = controller.state.value
+            assertEquals(lights, state.orderedLights)
+            assertTrue(state.favoriteLights.isEmpty())
+        }
+
+    @Test fun aFavoritedLightTheBridgeNoLongerReportsIsListedNowhere() =
+        runBlocking {
+            val storage = FakeStorage()
+            val beforeRestart =
+                lightingController(
+                    FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP, HALL_LAMP)) }),
+                    storage,
+                )
+            beforeRestart.load()
+            beforeRestart.toggleFavorite(KITCHEN_LAMP)
+
+            // The bridge no longer reports the favorited light; the lights it does report still list.
+            val afterRestart =
+                lightingController(
+                    FakeHueLighting(lightsResult = { HueResult.Ok(listOf(HALL_LAMP)) }),
+                    storage,
+                )
+            afterRestart.load()
+
+            val state = afterRestart.state.value
+            assertEquals(listOf(HALL_LAMP), state.orderedLights)
+            assertEquals(setOf(KITCHEN_LAMP.id), state.favoriteLights)
+            assertEquals(null, state.failure)
+        }
+
+    @Test fun forgettingTheBridgeClearsItsFavorites() =
+        runBlocking {
+            val storage = FakeStorage()
+            val controller = lightingController(FakeHueLighting(), storage)
+            controller.toggleFavorite(KITCHEN_LAMP)
+            controller.toggleFavorite(KITCHEN_ROOM)
+            assertTrue(storage.values.isNotEmpty())
+
+            // The forget path the shell calls: HueClient.forget → HueCredentials.forget → the one stored file.
+            assertTrue(HueCredentials(storage, key = { error("A unit test never seals a pairing.") }).forget())
+
+            val afterForget =
+                lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) }), storage)
+            afterForget.load()
+
+            val state = afterForget.state.value
+            assertTrue(state.favoriteLights.isEmpty())
+            assertTrue(state.favoriteRooms.isEmpty())
+        }
+
     @Test fun aFailedBrightnessReleaseSurfacesItsMessage() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })

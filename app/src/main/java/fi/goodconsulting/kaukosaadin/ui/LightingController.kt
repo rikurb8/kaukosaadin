@@ -83,6 +83,7 @@ internal class LightingController(
     suspend fun toggle(light: HueLight) {
         sendOn(HueTarget.Light(light.id), !light.on)
     }
+
     /** Sends one on/off command for [room]'s grouped light; a room the bridge reports no grouped light for is left alone. */
     suspend fun toggle(room: HueRoom) {
         val group = mutableState.value.groupedLightFor(room) ?: return
@@ -201,8 +202,6 @@ internal class LightingController(
         }
     }
 }
-
-
 
 /** The visible failure text of a read, or null when it returned a value. */
 private fun HueResult<*>.failure(): String? = (this as? HueResult.Failure)?.message
