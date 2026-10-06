@@ -59,7 +59,7 @@ internal object HueBrightness {
     const val MAX = 100
 }
 
-/** The exact JSON bodies the two supported commands send. Nothing else is written to a light. */
+/** The exact JSON bodies the supported commands send. Nothing else is written to a light. */
 internal object HueCommands {
     /** `{"on":{"on":true}}` or `{"on":{"on":false}}`. */
     fun onBody(on: Boolean): String = JSONObject().put("on", JSONObject().put("on", on)).toString()
@@ -72,6 +72,17 @@ internal object HueCommands {
      * bridge turns the light on anyway, this body is the only thing that changes.
      */
     fun brightnessBody(brightness: Int): String = JSONObject().put("dimming", JSONObject().put("brightness", brightness)).toString()
+
+    /**
+     * On plus brightness in one request: `{"on":{"on":true},"dimming":{"brightness":N}}`. The
+     * lighting presets write both fields together, so Bright and Dim turn the light on explicitly
+     * instead of relying on what a brightness-only write does to an off light.
+     */
+    fun onWithBrightnessBody(brightness: Int): String =
+        JSONObject()
+            .put("on", JSONObject().put("on", true))
+            .put("dimming", JSONObject().put("brightness", brightness))
+            .toString()
 }
 
 /**
@@ -104,6 +115,18 @@ internal class HueApi(
     ): HueResult<Unit> {
         if (brightness !in HueBrightness.MIN..HueBrightness.MAX) return HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE)
         return write(target, HueCommands.brightnessBody(brightness))
+    }
+
+    /**
+     * Turns [target] on at [brightness] in one request; a preset is one command, not an on followed
+     * by a brightness. Out-of-range values fail without touching the bridge, like [setBrightness].
+     */
+    suspend fun setOnWithBrightness(
+        target: HueCommandTarget,
+        brightness: Int,
+    ): HueResult<Unit> {
+        if (brightness !in HueBrightness.MIN..HueBrightness.MAX) return HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE)
+        return write(target, HueCommands.onWithBrightnessBody(brightness))
     }
 
     private suspend fun <T> read(

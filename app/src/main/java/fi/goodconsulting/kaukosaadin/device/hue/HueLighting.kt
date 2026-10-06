@@ -120,6 +120,15 @@ internal interface HueLighting {
         brightness: Int,
     ): HueResult<Unit>
 
+    /**
+     * Turns [target] on at [brightness] in one request, for the Bright and Dim presets; see
+     * [HueCommands.onWithBrightnessBody]. Unlike [setBrightness], it always turns the target on.
+     */
+    suspend fun setOnWithBrightness(
+        target: HueCommandTarget,
+        brightness: Int,
+    ): HueResult<Unit>
+
     /** Opens the event subscription; call from the screen's lifecycle (ticket #12). */
     fun connect()
 
@@ -166,6 +175,11 @@ private class BridgeHueLighting(
         target: HueCommandTarget,
         brightness: Int,
     ): HueResult<Unit> = api.setBrightness(target, brightness)
+
+    override suspend fun setOnWithBrightness(
+        target: HueCommandTarget,
+        brightness: Int,
+    ): HueResult<Unit> = api.setOnWithBrightness(target, brightness)
 
     override fun connect() = connection.connect()
 

@@ -780,6 +780,11 @@ private class FakeHueLighting(
         return brightnessCommand(target, brightness)
     }
 
+    override suspend fun setOnWithBrightness(
+        target: HueCommandTarget,
+        brightness: Int,
+    ): HueResult<Unit> = HueResult.Ok(Unit)
+
     override fun connect() {
         connects += 1
         connectionFailure?.let { mutableState.value = HueConnectionState.Failed(it) }
