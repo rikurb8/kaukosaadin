@@ -134,6 +134,84 @@ class SuperRemoteLightingSectionTest {
             assertEquals(1, fake.disconnects)
         }
 
+    @Test fun reconnectingRestoresReadinessAndSendsNoCommand() =
+        runBlocking {
+            val fake = RecordingHueLighting(groupedLightsResult = { HueResult.Ok(listOf(ON_GROUP)) })
+            val controller = LightingController(fake)
+
+            controller.reconnect(TARGET)
+
+            // Reconnect re-opens the subscription and re-reads the bridge...
+            assertEquals(1, fake.connects)
+            assertEquals(listOf(ON_GROUP), controller.state.value.groupedLights)
+            // ...and sends nothing: no preset, brightness or on/off.
+            assertTrue(fake.onWithBrightness.isEmpty())
+            assertTrue(fake.onOff.isEmpty())
+            assertTrue(fake.brightness.isEmpty())
+        }
+
+    @Test fun aSecondReconnectWhileOneIsInFlightIsDropped() =
+        runBlocking {
+            val gate = CompletableDeferred<Unit>()
+            val fake =
+                RecordingHueLighting {
+                    gate.await()
+                    HueResult.Ok(listOf(ON_GROUP))
+                }
+            val controller = LightingController(fake)
+
+            val first = launch { controller.reconnect(TARGET) }
+            withTimeout(TIMEOUT_MS) { controller.state.first { TARGET.id in it.busyTargets } }
+
+            val second = launch { controller.reconnect(TARGET) }
+            withTimeout(TIMEOUT_MS) { while (second.isActive) yield() }
+
+            assertEquals("the duplicate reconnect is dropped, not queued", 1, fake.connects)
+            gate.complete(Unit)
+            first.join()
+        }
+
+    @Test fun aReconnectWhileAPresetIsInFlightIsDropped() =
+        runBlocking {
+            val gate = CompletableDeferred<Unit>()
+            val fake = RecordingHueLighting()
+            fake.onWithBrightnessCommand = { _, _ ->
+                gate.await()
+                HueResult.Ok(Unit)
+            }
+            val controller = LightingController(fake)
+
+            val preset = launch { controller.applyPreset(TARGET, LightingPreset.Bright) }
+            withTimeout(TIMEOUT_MS) { controller.state.first { TARGET.id in it.busyTargets } }
+
+            val reconnect = launch { controller.reconnect(TARGET) }
+            withTimeout(TIMEOUT_MS) { while (reconnect.isActive) yield() }
+
+            assertEquals("the reconnect is dropped, not queued behind the preset", 0, fake.connects)
+            gate.complete(Unit)
+            preset.join()
+        }
+
+    @Test fun aPresetWhileAReconnectIsInFlightIsDropped() =
+        runBlocking {
+            val gate = CompletableDeferred<Unit>()
+            val fake =
+                RecordingHueLighting {
+                    gate.await()
+                    HueResult.Ok(listOf(ON_GROUP))
+                }
+            val controller = LightingController(fake)
+
+            val reconnect = launch { controller.reconnect(TARGET) }
+            withTimeout(TIMEOUT_MS) { controller.state.first { TARGET.id in it.busyTargets } }
+
+            controller.applyPreset(TARGET, LightingPreset.Bright)
+
+            assertTrue("the preset is dropped while the reconnect is in flight", fake.onWithBrightness.isEmpty())
+            gate.complete(Unit)
+            reconnect.join()
+        }
+
     @Test fun aBridgeFailureLeavesTheAppleTvSectionUsable() =
         runBlocking {
             val fake = RecordingHueLighting()

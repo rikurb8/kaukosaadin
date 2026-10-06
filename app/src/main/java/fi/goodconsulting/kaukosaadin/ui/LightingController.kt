@@ -52,7 +52,7 @@ internal data class LightingState(
     val loading: Boolean = true,
     /** The most recent failure to show, or null. A failed load or command surfaces it; a success clears it. */
     val failure: String? = null,
-    /** Target ids with a command in flight: a light id, or a room's or zone's grouped-light id. Their controls are disabled meanwhile. */
+    /** Target ids with an operation in flight — a preset, a command or a reconnect — whose controls are disabled meanwhile. */
     val busyTargets: Set<String> = emptySet(),
     /** The slider value the operator is dragging, per target id. A draft is not a command, so it is never sent. */
     val brightnessDrafts: Map<String, Int> = emptyMap(),
@@ -70,7 +70,8 @@ internal data class LightingState(
  * keeps a light, room or zone among the favorites, written to the bridge's own storage, and the
  * screen lists those first through [LightingState.orderedLights], [LightingState.orderedRooms] and
  * [LightingState.orderedZones] without hiding or repeating any of them. [applyPreset] is the Super
- * remote's one-tap Bright/Dim/Off for a room's or zone's grouped light. [live] is the screen's
+ * remote's one-tap Bright/Dim/Off for a room's or zone's grouped light and [reconnect] reopens the
+ * bridge's subscription and reads it again. [live] is the screen's
  * visible lifetime: it refreshes [state] on entry and merges the bridge's own changes into it until
  * it is cancelled, so a switch or another app shows up here without ever becoming a command.
  */
@@ -182,6 +183,22 @@ internal class LightingController(
             mutableState.update { state ->
                 if (result is HueResult.Failure) state.copy(failure = result.message) else state.copy(failure = null)
             }
+        } finally {
+            mutableState.update { it.copy(busyTargets = it.busyTargets - target.id) }
+        }
+    }
+
+    /**
+     * Re-opens the bridge's live subscription and reads its state again, for the section's Reconnect
+     * control: readiness and state are restored and nothing is sent — no preset, brightness or on/off.
+     * It shares [applyPreset]'s guard for [target], so it never runs while a preset is in flight and a
+     * duplicate tap is dropped.
+     */
+    suspend fun reconnect(target: HueCommandTarget) {
+        if (!begin(target.id)) return
+        try {
+            lighting.connect()
+            load()
         } finally {
             mutableState.update { it.copy(busyTargets = it.busyTargets - target.id) }
         }

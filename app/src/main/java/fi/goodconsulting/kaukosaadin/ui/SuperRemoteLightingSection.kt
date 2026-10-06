@@ -30,11 +30,11 @@ import kotlin.math.roundToInt
 
 /**
  * The Super remote's lighting: Bright, Dim and Off for the configured room's or zone's grouped light,
- * above the state the bridge reports. [lighting] is the configured bridge with its chosen grouped
- * light and [client] its lighting client, resolved by [SuperRemoteScreen] from the Super remote's own
- * bindings. With no chosen room or zone, a forgotten bridge or a bridge with no client, the section
- * asks for reselection and commands nothing: it never falls back to another bridge, room, zone or
- * light.
+ * a Reconnect control, above the state the bridge reports. [lighting] is the configured bridge with
+ * its chosen grouped light and [client] its lighting client, resolved by [SuperRemoteScreen] from the
+ * Super remote's own bindings. With no chosen room or zone, a forgotten bridge or a bridge with no
+ * client, the section asks for reselection and commands nothing: it never falls back to another
+ * bridge, room, zone or light.
  *
  * The section owns its own [LightingController] and its own readiness and failure, apart from the
  * Apple TV section's session, so a bridge failure never blocks the TV controls and vice versa.
@@ -92,8 +92,8 @@ private fun SuperRemoteLightingPresets(
         return
     }
     Text(reportedState(state.groupedLights.firstOrNull { it.id == target.id }), style = MaterialTheme.typography.bodyMedium)
-    // Disabled while the live subscription is still opening or this target's command is in flight,
-    // so a repeated tap is refused rather than becoming a second command.
+    // Disabled while the live subscription is still opening or an operation for this target is in
+    // flight, so a repeated tap is refused rather than becoming a second command or a second connect.
     val unavailable = connection is HueConnectionState.Connecting || target.id in state.busyTargets
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         LightingPreset.entries.forEach { preset ->
@@ -102,6 +102,13 @@ private fun SuperRemoteLightingPresets(
                 enabled = !unavailable,
             ) { Text(preset.label) }
         }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Re-opens the subscription and reads the bridge again; it sends no lighting command.
+        Button(
+            onClick = { scope.launch { controller.reconnect(target) } },
+            enabled = !unavailable,
+        ) { Text("Reconnect") }
     }
 }
 
