@@ -222,3 +222,25 @@ internal fun LightingState.brightnessEnabled(target: HueTarget): Boolean =
 /** The grouped light that carries [room]'s on/off and brightness, or null when the room has no controllable group. */
 internal fun LightingState.groupedLightFor(room: HueRoom): HueGroupedLight? =
     room.groupedLightId?.let { id -> groupedLights.firstOrNull { it.id == id } }
+
+/** The bridge's lights with the operator's favorites first; every light the bridge reported is listed exactly once. */
+internal val LightingState.orderedLights: List<HueLight>
+    get() = favoritesFirst(lights, favoriteLights) { it.id }
+
+/** The bridge's rooms with the operator's favorites first; every room the bridge reported is listed exactly once. */
+internal val LightingState.orderedRooms: List<HueRoom>
+    get() = favoritesFirst(rooms, favoriteRooms) { it.id }
+
+/**
+ * [items] with the ones [favorites] names first, each part keeping the bridge's own order. This splits
+ * the one list rather than building two, so nothing is dropped and nothing is listed twice, and a kept
+ * id the bridge no longer reports matches no item — it is in neither part, so it is never rendered.
+ */
+private fun <T> favoritesFirst(
+    items: List<T>,
+    favorites: Set<String>,
+    id: (T) -> String,
+): List<T> {
+    val (kept, rest) = items.partition { id(it) in favorites }
+    return kept + rest
+}

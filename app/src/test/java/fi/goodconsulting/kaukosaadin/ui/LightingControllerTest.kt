@@ -336,6 +336,43 @@ class LightingControllerTest {
             assertEquals(setOf(KITCHEN_LAMP.id), afterRestart.state.value.favoriteLights)
         }
 
+    @Test fun favoriteLightsAreListedFirstWithoutHidingOrRepeatingAnyLight() =
+        runBlocking {
+            val storage = FakeStorage()
+            val lights = listOf(DESK_LAMP, KITCHEN_LAMP, HALL_LAMP)
+            val beforeRestart = lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(lights) }), storage)
+            beforeRestart.load()
+
+            beforeRestart.toggleFavorite(HALL_LAMP)
+
+            val afterRestart = lightingController(FakeHueLighting(lightsResult = { HueResult.Ok(lights) }), storage)
+            afterRestart.load()
+
+            val listed = afterRestart.state.value.orderedLights
+            assertEquals(listOf(HALL_LAMP, DESK_LAMP, KITCHEN_LAMP), listed)
+            // The one list split in two: every light is still here, and none of them twice.
+            assertEquals(lights.size, listed.size)
+            assertEquals(lights.toSet(), listed.toSet())
+        }
+
+    @Test fun favoriteRoomsAreListedFirstWithoutHidingOrRepeatingAnyRoom() =
+        runBlocking {
+            val storage = FakeStorage()
+            val rooms = listOf(KITCHEN_ROOM, HALL_ROOM, NO_GROUP_ROOM)
+            val beforeRestart = lightingController(FakeHueLighting(roomsResult = { HueResult.Ok(rooms) }), storage)
+            beforeRestart.load()
+
+            beforeRestart.toggleFavorite(HALL_ROOM)
+
+            val afterRestart = lightingController(FakeHueLighting(roomsResult = { HueResult.Ok(rooms) }), storage)
+            afterRestart.load()
+
+            val listed = afterRestart.state.value.orderedRooms
+            assertEquals(listOf(HALL_ROOM, KITCHEN_ROOM, NO_GROUP_ROOM), listed)
+            assertEquals(rooms.size, listed.size)
+            assertEquals(rooms.toSet(), listed.toSet())
+        }
+
     @Test fun aFailedBrightnessReleaseSurfacesItsMessage() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })
@@ -364,6 +401,8 @@ class LightingControllerTest {
 
         val KITCHEN = HueLight(id = "light-1", name = "Kitchen", on = false, brightness = null)
         val KITCHEN_LAMP = HueLight(id = "light-2", name = "Kitchen lamp", on = true, brightness = 40.0)
+        val HALL_LAMP = HueLight(id = "light-3", name = "Hall lamp", on = true, brightness = 70.0)
+        val DESK_LAMP = HueLight(id = "light-4", name = "Desk lamp", on = false, brightness = null)
         val KITCHEN_ROOM = HueRoom(id = "room-1", name = "Kitchen", groupedLightId = "grouped-1")
         val KITCHEN_GROUP = HueGroupedLight(id = "grouped-1", on = false, brightness = null)
         val HALL_ROOM = HueRoom(id = "room-2", name = "Hall", groupedLightId = "grouped-2")
