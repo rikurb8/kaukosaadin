@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import fi.goodconsulting.kaukosaadin.device.DeviceStore
+import fi.goodconsulting.kaukosaadin.device.SavedDevice
 
 /** Where the app is; every screen but the remote returns to it. */
 private enum class Screen { Remote, AddDevice, DeviceSettings, GeneralSettings }
@@ -37,7 +38,8 @@ private enum class Screen { Remote, AddDevice, DeviceSettings, GeneralSettings }
 /**
  * The app shell: the saved devices, the screen router, theme/layout preferences and the empty
  * screen. The selected device's [DeviceIntegration] owns its kind's setup, remote and settings;
- * [DeviceIntegrations] is the register of kinds.
+ * [DeviceIntegrations] is the register of kinds. The Super remote layout drives [SuperRemoteStore]'s
+ * own bindings instead of the selected device.
  */
 @Composable
 fun KaukosaadinApp() {
@@ -81,6 +83,7 @@ fun KaukosaadinApp() {
                     )
                 screen == Screen.DeviceSettings ->
                     DeviceSettingsScreen(innerPadding, current, store, controls, onBack = toRemote)
+                layout == AppLayout.SuperRemote -> SuperRemoteRoute(innerPadding, devices) { screen = it }
                 else -> {
                     val remote =
                         RemoteActions(
@@ -118,6 +121,30 @@ private fun SystemBars(colors: ColorScheme) {
         bars.isAppearanceLightStatusBars = light
         bars.isAppearanceLightNavigationBars = light
     }
+}
+
+/**
+ * The Super remote layout: the Super remote's own bindings, read for [devices], and the screen that
+ * drives them. Its bindings are kept in `super_remote` storage apart from the saved devices, so
+ * routing here changes neither the picker's selection nor what the Super remote is bound to.
+ */
+@Composable
+private fun SuperRemoteRoute(
+    padding: PaddingValues,
+    devices: List<SavedDevice>,
+    onScreen: (Screen) -> Unit,
+) {
+    val context = LocalContext.current.applicationContext
+    val store = remember { SuperRemoteStore(context) }
+    val bindings by store.bindings.collectAsState()
+    SuperRemoteScreen(
+        padding = padding,
+        devices = devices,
+        bindings = bindings,
+        onSetup = { onScreen(Screen.AddDevice) },
+        onDeviceSettings = { onScreen(Screen.DeviceSettings) },
+        onGeneralSettings = { onScreen(Screen.GeneralSettings) },
+    )
 }
 
 @Composable
