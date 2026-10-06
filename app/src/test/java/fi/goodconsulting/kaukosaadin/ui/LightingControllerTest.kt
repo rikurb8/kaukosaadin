@@ -12,6 +12,7 @@ import fi.goodconsulting.kaukosaadin.device.hue.HueRoom
 import fi.goodconsulting.kaukosaadin.device.hue.HueStorage
 import fi.goodconsulting.kaukosaadin.device.hue.HueTarget
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -161,6 +162,8 @@ class LightingControllerTest {
             assertEquals(TOGGLE_FAILURE, state.failure)
             assertTrue(state.busyTargets.isEmpty())
             assertFalse(state.lights.single().on)
+            // Reported once and dropped: nothing re-sends it.
+            assertEquals(1, fake.commands.size)
         }
 
     @Test fun aToggledRoomCommandsItsGroupedLight() =
@@ -451,6 +454,197 @@ class LightingControllerTest {
             assertEquals(40.0, state.lights.single().brightness)
         }
 
+    @Test fun anEventUpdatesALightsOnOffAndBrightness() =
+        runBlocking {
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN, HALL_LAMP)) })
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            // As a physical switch or another app would report it.
+            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = 61.0))
+
+            val state = withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.first { light -> light.id == KITCHEN.id }.on } }
+            val kitchen = state.lights.first { it.id == KITCHEN.id }
+            assertTrue(kitchen.on)
+            assertEquals(61.0, kitchen.brightness!!, 0.0)
+            // The light the event did not name keeps what the bridge last reported.
+            assertEquals(HALL_LAMP, state.lights.first { it.id == HALL_LAMP.id })
+            visible.cancelAndJoin()
+        }
+
+    @Test fun anEventUpdatesAGroupedLight() =
+        runBlocking {
+            val fake =
+                FakeHueLighting(
+                    roomsResult = { HueResult.Ok(listOf(HALL_ROOM)) },
+                    groupedLightsResult = { HueResult.Ok(listOf(HALL_GROUP)) },
+                )
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            fake.emit(
+                HueEvent(action = "update", resourceId = HALL_GROUP.id, resourceType = "grouped_light", on = false, brightness = 20.0),
+            )
+
+            val group = withTimeout(TIMEOUT_MS) { controller.state.first { !it.groupedLights.single().on } }.groupedLights.single()
+            assertFalse(group.on)
+            assertEquals(20.0, group.brightness!!, 0.0)
+            visible.cancelAndJoin()
+        }
+
+    @Test fun anEventForAnUnknownResourceChangesNothing() =
+        runBlocking {
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            // Two resources the screen does not track, then one it does: the unknown ones are processed
+            // first, and the light the screen tracks is the only thing they could have touched.
+            fake.emit(HueEvent(action = "update", resourceId = "light-gone", resourceType = "light", on = true, brightness = 50.0))
+            fake.emit(HueEvent(action = "update", resourceId = "scene-1", resourceType = "scene", on = true, brightness = 50.0))
+            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = null))
+
+            val state = withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.single().on } }
+            assertEquals(listOf(KITCHEN.copy(on = true)), state.lights)
+            visible.cancelAndJoin()
+        }
+
+    @Test fun anEventNeverSendsACommand() =
+        runBlocking {
+            val fake =
+                FakeHueLighting(
+                    lightsResult = { HueResult.Ok(listOf(KITCHEN)) },
+                    roomsResult = { HueResult.Ok(listOf(KITCHEN_ROOM)) },
+                    groupedLightsResult = { HueResult.Ok(listOf(KITCHEN_GROUP)) },
+                )
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = 40.0))
+            fake.emit(
+                HueEvent(action = "update", resourceId = KITCHEN_GROUP.id, resourceType = "grouped_light", on = true, brightness = 30.0),
+            )
+            withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.single().on && it.groupedLights.single().on } }
+
+            assertTrue(fake.commands.isEmpty())
+            assertTrue(fake.brightnessCommands.isEmpty())
+            visible.cancelAndJoin()
+        }
+
+    @Test fun openingTheScreenConnectsAndLeavingItDisconnects() =
+        runBlocking {
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
+            val controller = lightingController(fake)
+
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            assertEquals(1, fake.connects)
+            assertEquals(0, fake.disconnects)
+
+            // Leaving the screen, or the app going to the background, cancels the live lifetime.
+            visible.cancelAndJoin()
+
+            assertEquals(1, fake.disconnects)
+        }
+
+    @Test fun returningToTheScreenRefreshesWhatChangedWhileItWasGone() =
+        runBlocking {
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
+            val controller = lightingController(fake)
+
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.isNotEmpty() } }
+            assertEquals(listOf(KITCHEN), controller.state.value.lights)
+            visible.cancelAndJoin()
+
+            // The bridge moved on while the screen was backgrounded; the next entry reads it again.
+            fake.lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) }
+
+            val returned = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { controller.state.first { it.lights == listOf(KITCHEN_LAMP) } }
+            returned.cancelAndJoin()
+
+            assertEquals(2, fake.connects)
+        }
+
+    @Test fun aFailedLiveConnectionSurfacesItsMessage() =
+        runBlocking {
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
+            fake.connectionFailure = CONNECTION_FAILURE
+            val controller = lightingController(fake)
+
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            assertEquals(CONNECTION_FAILURE, failureMessage(controller.connection.value, controller.state.value))
+            visible.cancelAndJoin()
+        }
+
+    @Test fun theFailureBannerPrefersTheLiveConnectionsFailure() {
+        val controller = lightingController(FakeHueLighting())
+        val readOrCommandFailure = controller.state.value.copy(failure = TOGGLE_FAILURE)
+
+        assertEquals(CONNECTION_FAILURE, failureMessage(HueConnectionState.Failed(CONNECTION_FAILURE), readOrCommandFailure))
+        assertEquals(TOGGLE_FAILURE, failureMessage(HueConnectionState.Connected, readOrCommandFailure))
+        assertEquals(TOGGLE_FAILURE, failureMessage(HueConnectionState.Connecting, readOrCommandFailure))
+        assertEquals(null, failureMessage(HueConnectionState.Disconnected, controller.state.value))
+    }
+
+    @Test fun aToggleUsesTheLightsLiveStateNotTheRenderedSnapshot() =
+        runBlocking {
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            // The screen rendered this light while it was off.
+            val lights = controller.state.value.lights
+            val rendered = lights.single()
+            assertFalse(rendered.on)
+
+            // A physical switch turns it on before the operator's tap reaches the controller.
+            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = null))
+            withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.single().on } }
+
+            controller.toggle(rendered)
+
+            // The command follows the light's live state (on → off), not the stale rendered snapshot (off → on).
+            assertEquals(listOf(HueTarget.Light(KITCHEN.id) to false), fake.commands)
+            visible.cancelAndJoin()
+        }
+
+    @Test fun aToggleAlreadyInFlightIsDroppedEvenWhenAnEventChangedTheLight() =
+        runBlocking {
+            val gate = CompletableDeferred<Unit>()
+            val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
+            fake.onCommand = { _, _ ->
+                gate.await()
+                HueResult.Ok(Unit)
+            }
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+
+            val first = launch { controller.toggle(KITCHEN) }
+            withTimeout(TIMEOUT_MS) { controller.state.first { KITCHEN.id in it.busyTargets } }
+
+            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = false, brightness = null))
+
+            val second = launch { controller.toggle(KITCHEN) }
+            withTimeout(TIMEOUT_MS) { while (second.isActive) yield() }
+
+            assertEquals(listOf(HueTarget.Light(KITCHEN.id) to true), fake.commands)
+
+            gate.complete(Unit)
+            first.join()
+            visible.cancelAndJoin()
+        }
+
     private companion object {
         const val TIMEOUT_MS = 5_000L
         const val LIGHTS_FAILURE = "The bridge rejected the app key. Pair the bridge again."
@@ -458,6 +652,7 @@ class LightingControllerTest {
         const val GROUPS_FAILURE = "The bridge refused the request (Hue error 901)."
         const val TOGGLE_FAILURE = "The bridge no longer has that light, room or group."
         const val BRIGHTNESS_FAILURE = "The bridge refused the request (503)."
+        const val CONNECTION_FAILURE = "The bridge closed the live subscription."
 
         val KITCHEN = HueLight(id = "light-1", name = "Kitchen", on = false, brightness = null)
         val KITCHEN_LAMP = HueLight(id = "light-2", name = "Kitchen lamp", on = true, brightness = 40.0)
@@ -500,9 +695,9 @@ private class FakeStorage : HueStorage {
 
 /** A [HueLighting] with no bridge: each call returns whatever the test's lambdas decide. */
 private class FakeHueLighting(
-    private val lightsResult: suspend () -> HueResult<List<HueLight>> = { HueResult.Ok(emptyList()) },
-    private val roomsResult: suspend () -> HueResult<List<HueRoom>> = { HueResult.Ok(emptyList()) },
-    private val groupedLightsResult: suspend () -> HueResult<List<HueGroupedLight>> = { HueResult.Ok(emptyList()) },
+    var lightsResult: suspend () -> HueResult<List<HueLight>> = { HueResult.Ok(emptyList()) },
+    var roomsResult: suspend () -> HueResult<List<HueRoom>> = { HueResult.Ok(emptyList()) },
+    var groupedLightsResult: suspend () -> HueResult<List<HueGroupedLight>> = { HueResult.Ok(emptyList()) },
 ) : HueLighting {
     /** Every on/off command sent, in order. */
     val commands = mutableListOf<Pair<HueTarget, Boolean>>()
@@ -516,9 +711,25 @@ private class FakeHueLighting(
     /** What [setBrightness] answers; defaults to success. */
     var brightnessCommand: suspend (HueTarget, Int) -> HueResult<Unit> = { _, _ -> HueResult.Ok(Unit) }
 
-    override val state: StateFlow<HueConnectionState> = MutableStateFlow(HueConnectionState.Disconnected)
+    /** How many times the screen opened the live subscription, and how many times it released it. */
+    var connects = 0
+    var disconnects = 0
 
-    override val events: SharedFlow<HueEvent> = MutableSharedFlow()
+    /** When set, [connect] reports this as the failed live connection, like a bridge that refuses the stream. */
+    var connectionFailure: String? = null
+
+    private val mutableState = MutableStateFlow<HueConnectionState>(HueConnectionState.Disconnected)
+    private val mutableEvents = MutableSharedFlow<HueEvent>(extraBufferCapacity = EVENT_BUFFER)
+
+    override val state: StateFlow<HueConnectionState> = mutableState
+
+    override val events: SharedFlow<HueEvent> = mutableEvents
+
+    /** How many live collectors are listening, so a test can wait until the screen is subscribed. */
+    val listeners: StateFlow<Int> get() = mutableEvents.subscriptionCount
+
+    /** Delivers one bridge-reported change to whoever is collecting. */
+    suspend fun emit(event: HueEvent) = mutableEvents.emit(event)
 
     override suspend fun lights(): HueResult<List<HueLight>> = lightsResult()
 
@@ -542,7 +753,17 @@ private class FakeHueLighting(
         return brightnessCommand(target, brightness)
     }
 
-    override fun connect() = Unit
+    override fun connect() {
+        connects += 1
+        connectionFailure?.let { mutableState.value = HueConnectionState.Failed(it) }
+    }
 
-    override fun disconnect() = Unit
+    override fun disconnect() {
+        disconnects += 1
+        mutableState.value = HueConnectionState.Disconnected
+    }
+
+    private companion object {
+        const val EVENT_BUFFER = 16
+    }
 }

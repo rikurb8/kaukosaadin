@@ -1,5 +1,6 @@
 package fi.goodconsulting.kaukosaadin.ui
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,7 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import fi.goodconsulting.kaukosaadin.device.hue.HueConnectionState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroupedLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLight
@@ -49,8 +52,8 @@ private const val MAX_BRIGHTNESS = 100
  * bulbs to the picker, and nothing here touches the TV remote's keys. [lighting] is null while the
  * bridge has no stored app key. Each light, and each room with a grouped light, has an on/off switch
  * and a brightness slider that sends its one command on release (ticket #10), and a favorite control
- * whose change [favorites] keeps on the phone (ticket #11). #12 adds the live subscription to
- * [LightingContent].
+ * whose change [favorites] keeps on the phone (ticket #11). While the screen is visible, [LightingContent]
+ * holds the bridge's live subscription, so a switch or another app shows up here too.
  */
 @Composable
 internal fun LightingScreen(
@@ -93,18 +96,23 @@ internal fun LightingScreen(
     }
 }
 
-/** The stateful part: fetches once when the screen opens and renders the banner and the list. */
+/** The stateful part: refreshes the bridge's state while the screen is visible and renders the banner and the list. */
 @Composable
 private fun LightingContent(controller: LightingController) {
     val scope = rememberCoroutineScope()
+    val activity = LocalActivity.current
     val state by controller.state.collectAsState()
     val connection by controller.connection.collectAsState()
-    val failure = (connection as? HueConnectionState.Failed)?.message ?: state.failure
 
-    // Fetch the bridge's state when the screen opens; ticket #12 moves this to the screen lifecycle.
-    LaunchedEffect(controller) { controller.load() }
+    // Opening the lighting screen connects the live subscription and refreshes the bridge's state;
+    // leaving or backgrounding releases it, and coming back repeats both. A new controller restarts it.
+    LaunchedEffect(activity, controller) {
+        if (activity is LifecycleOwner) {
+            activity.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { controller.live() }
+        }
+    }
 
-    LightingFailureBanner(failure)
+    LightingFailureBanner(failureMessage(connection, state))
     if (state.loading) {
         Text("Reading lights and rooms from the bridge…", style = MaterialTheme.typography.bodySmall)
     } else {
