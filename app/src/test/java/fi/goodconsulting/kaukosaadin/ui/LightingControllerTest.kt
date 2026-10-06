@@ -1,16 +1,16 @@
 package fi.goodconsulting.kaukosaadin.ui
 
+import fi.goodconsulting.kaukosaadin.device.hue.HueCommandTarget
 import fi.goodconsulting.kaukosaadin.device.hue.HueConnectionState
 import fi.goodconsulting.kaukosaadin.device.hue.HueCredentials
 import fi.goodconsulting.kaukosaadin.device.hue.HueEvent
 import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
+import fi.goodconsulting.kaukosaadin.device.hue.HueGroup
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroupedLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
 import fi.goodconsulting.kaukosaadin.device.hue.HueResult
-import fi.goodconsulting.kaukosaadin.device.hue.HueRoom
 import fi.goodconsulting.kaukosaadin.device.hue.HueStorage
-import fi.goodconsulting.kaukosaadin.device.hue.HueTarget
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,13 +28,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LightingControllerTest {
-    @Test fun loadRendersTheBridgesLightsAndRooms() =
+    @Test fun loadRendersTheBridgesLightsRoomsAndZones() =
         runBlocking {
             val controller =
                 lightingController(
                     FakeHueLighting(
                         lightsResult = { HueResult.Ok(listOf(KITCHEN)) },
                         roomsResult = { HueResult.Ok(listOf(KITCHEN_ROOM)) },
+                        zonesResult = { HueResult.Ok(listOf(GARDEN_ZONE)) },
                     ),
                 )
 
@@ -43,6 +44,7 @@ class LightingControllerTest {
             val state = controller.state.value
             assertEquals(listOf(KITCHEN), state.lights)
             assertEquals(listOf(KITCHEN_ROOM), state.rooms)
+            assertEquals(listOf(GARDEN_ZONE), state.zones)
             assertFalse(state.loading)
             assertEquals(null, state.failure)
         }
@@ -118,7 +120,7 @@ class LightingControllerTest {
             val toggle = launch { controller.toggle(KITCHEN) }
             withTimeout(TIMEOUT_MS) { controller.state.first { KITCHEN.id in it.busyTargets } }
 
-            assertEquals(listOf(HueTarget.Light(KITCHEN.id) to true), fake.commands)
+            assertEquals(listOf(HueCommandTarget.Light(KITCHEN.id) to true), fake.commands)
 
             gate.complete(Unit)
             toggle.join()
@@ -179,7 +181,7 @@ class LightingControllerTest {
             controller.toggle(KITCHEN_ROOM)
 
             val state = controller.state.value
-            assertEquals(listOf(HueTarget.Group(KITCHEN_GROUP.id) to true), fake.commands)
+            assertEquals(listOf(HueCommandTarget.Group(KITCHEN_GROUP.id) to true), fake.commands)
             assertTrue(state.groupedLights.single().on)
         }
 
@@ -202,7 +204,7 @@ class LightingControllerTest {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Light(KITCHEN_LAMP.id)
+            val target = HueCommandTarget.Light(KITCHEN_LAMP.id)
 
             controller.dragBrightness(target, 35)
             controller.dragBrightness(target, 80)
@@ -217,7 +219,7 @@ class LightingControllerTest {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN_LAMP)) })
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Light(KITCHEN_LAMP.id)
+            val target = HueCommandTarget.Light(KITCHEN_LAMP.id)
             controller.dragBrightness(target, 35)
             controller.dragBrightness(target, 80)
 
@@ -225,7 +227,7 @@ class LightingControllerTest {
 
             val state = controller.state.value
             assertEquals(listOf(target to 80), fake.brightnessCommands)
-            assertEquals(emptyList<Pair<HueTarget, Boolean>>(), fake.commands)
+            assertEquals(emptyList<Pair<HueCommandTarget, Boolean>>(), fake.commands)
             assertTrue(state.brightnessDrafts.isEmpty())
             assertEquals(80.0, state.lights.single().brightness)
         }
@@ -239,7 +241,7 @@ class LightingControllerTest {
                 )
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Group(HALL_GROUP.id)
+            val target = HueCommandTarget.Group(HALL_GROUP.id)
 
             assertTrue(controller.state.value.brightnessEnabled(target))
             controller.dragBrightness(target, 65)
@@ -256,7 +258,7 @@ class LightingControllerTest {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN)) })
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Light(KITCHEN.id)
+            val target = HueCommandTarget.Light(KITCHEN.id)
 
             assertFalse(controller.state.value.brightnessEnabled(target))
 
@@ -277,7 +279,7 @@ class LightingControllerTest {
                 )
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Group(KITCHEN_GROUP.id)
+            val target = HueCommandTarget.Group(KITCHEN_GROUP.id)
 
             assertFalse(controller.state.value.brightnessEnabled(target))
 
@@ -299,7 +301,7 @@ class LightingControllerTest {
             }
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Light(KITCHEN_LAMP.id)
+            val target = HueCommandTarget.Light(KITCHEN_LAMP.id)
             controller.dragBrightness(target, 55)
 
             val first = launch { controller.releaseBrightness(target) }
@@ -356,6 +358,26 @@ class LightingControllerTest {
             // The one list split in two: every light is still here, and none of them twice.
             assertEquals(lights.size, listed.size)
             assertEquals(lights.toSet(), listed.toSet())
+        }
+
+    @Test fun aZoneIsControlledAndFavoritedThroughItsGroupedLight() =
+        runBlocking {
+            val fake =
+                FakeHueLighting(
+                    zonesResult = { HueResult.Ok(listOf(GARDEN_ZONE)) },
+                    groupedLightsResult = { HueResult.Ok(listOf(GARDEN_GROUP)) },
+                )
+            val controller = lightingController(fake)
+            controller.load()
+
+            controller.toggle(GARDEN_ZONE)
+            controller.toggleFavorite(GARDEN_ZONE)
+
+            val state = controller.state.value
+            assertEquals(listOf(HueCommandTarget.Group(GARDEN_GROUP.id) to true), fake.commands)
+            assertTrue(state.groupedLights.single().on)
+            assertEquals(setOf(GARDEN_ZONE.id), state.favoriteGroups)
+            assertEquals(listOf(GARDEN_ZONE), state.orderedZones)
         }
 
     @Test fun favoriteRoomsAreListedFirstWithoutHidingOrRepeatingAnyRoom() =
@@ -433,7 +455,7 @@ class LightingControllerTest {
 
             val state = afterForget.state.value
             assertTrue(state.favoriteLights.isEmpty())
-            assertTrue(state.favoriteRooms.isEmpty())
+            assertTrue(state.favoriteGroups.isEmpty())
         }
 
     @Test fun aFailedBrightnessReleaseSurfacesItsMessage() =
@@ -442,7 +464,7 @@ class LightingControllerTest {
             fake.brightnessCommand = { _, _ -> HueResult.Failure(BRIGHTNESS_FAILURE) }
             val controller = lightingController(fake)
             controller.load()
-            val target = HueTarget.Light(KITCHEN_LAMP.id)
+            val target = HueCommandTarget.Light(KITCHEN_LAMP.id)
             controller.dragBrightness(target, 55)
 
             controller.releaseBrightness(target)
@@ -462,7 +484,7 @@ class LightingControllerTest {
             withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
 
             // As a physical switch or another app would report it.
-            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = 61.0))
+            fake.emit(HueEvent(resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = 61.0))
 
             val state = withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.first { light -> light.id == KITCHEN.id }.on } }
             val kitchen = state.lights.first { it.id == KITCHEN.id }
@@ -485,7 +507,7 @@ class LightingControllerTest {
             withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
 
             fake.emit(
-                HueEvent(action = "update", resourceId = HALL_GROUP.id, resourceType = "grouped_light", on = false, brightness = 20.0),
+                HueEvent(resourceId = HALL_GROUP.id, resourceType = "grouped_light", on = false, brightness = 20.0),
             )
 
             val group = withTimeout(TIMEOUT_MS) { controller.state.first { !it.groupedLights.single().on } }.groupedLights.single()
@@ -503,9 +525,9 @@ class LightingControllerTest {
 
             // Two resources the screen does not track, then one it does: the unknown ones are processed
             // first, and the light the screen tracks is the only thing they could have touched.
-            fake.emit(HueEvent(action = "update", resourceId = "light-gone", resourceType = "light", on = true, brightness = 50.0))
-            fake.emit(HueEvent(action = "update", resourceId = "scene-1", resourceType = "scene", on = true, brightness = 50.0))
-            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = null))
+            fake.emit(HueEvent(resourceId = "light-gone", resourceType = "light", on = true, brightness = 50.0))
+            fake.emit(HueEvent(resourceId = "scene-1", resourceType = "scene", on = true, brightness = 50.0))
+            fake.emit(HueEvent(resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = null))
 
             val state = withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.single().on } }
             assertEquals(listOf(KITCHEN.copy(on = true)), state.lights)
@@ -524,9 +546,9 @@ class LightingControllerTest {
             val visible = launch { controller.live() }
             withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
 
-            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = 40.0))
+            fake.emit(HueEvent(resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = 40.0))
             fake.emit(
-                HueEvent(action = "update", resourceId = KITCHEN_GROUP.id, resourceType = "grouped_light", on = true, brightness = 30.0),
+                HueEvent(resourceId = KITCHEN_GROUP.id, resourceType = "grouped_light", on = true, brightness = 30.0),
             )
             withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.single().on && it.groupedLights.single().on } }
 
@@ -608,13 +630,13 @@ class LightingControllerTest {
             assertFalse(rendered.on)
 
             // A physical switch turns it on before the operator's tap reaches the controller.
-            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = null))
+            fake.emit(HueEvent(resourceId = KITCHEN.id, resourceType = "light", on = true, brightness = null))
             withTimeout(TIMEOUT_MS) { controller.state.first { it.lights.single().on } }
 
             controller.toggle(rendered)
 
             // The command follows the light's live state (on → off), not the stale rendered snapshot (off → on).
-            assertEquals(listOf(HueTarget.Light(KITCHEN.id) to false), fake.commands)
+            assertEquals(listOf(HueCommandTarget.Light(KITCHEN.id) to false), fake.commands)
             visible.cancelAndJoin()
         }
 
@@ -633,12 +655,12 @@ class LightingControllerTest {
             val first = launch { controller.toggle(KITCHEN) }
             withTimeout(TIMEOUT_MS) { controller.state.first { KITCHEN.id in it.busyTargets } }
 
-            fake.emit(HueEvent(action = "update", resourceId = KITCHEN.id, resourceType = "light", on = false, brightness = null))
+            fake.emit(HueEvent(resourceId = KITCHEN.id, resourceType = "light", on = false, brightness = null))
 
             val second = launch { controller.toggle(KITCHEN) }
             withTimeout(TIMEOUT_MS) { while (second.isActive) yield() }
 
-            assertEquals(listOf(HueTarget.Light(KITCHEN.id) to true), fake.commands)
+            assertEquals(listOf(HueCommandTarget.Light(KITCHEN.id) to true), fake.commands)
 
             gate.complete(Unit)
             first.join()
@@ -658,12 +680,14 @@ class LightingControllerTest {
         val KITCHEN_LAMP = HueLight(id = "light-2", name = "Kitchen lamp", on = true, brightness = 40.0)
         val HALL_LAMP = HueLight(id = "light-3", name = "Hall lamp", on = true, brightness = 70.0)
         val DESK_LAMP = HueLight(id = "light-4", name = "Desk lamp", on = false, brightness = null)
-        val KITCHEN_ROOM = HueRoom(id = "room-1", name = "Kitchen", groupedLightId = "grouped-1")
+        val KITCHEN_ROOM = HueGroup(id = "room-1", name = "Kitchen", groupedLightId = "grouped-1")
         val KITCHEN_GROUP = HueGroupedLight(id = "grouped-1", on = false, brightness = null)
-        val HALL_ROOM = HueRoom(id = "room-2", name = "Hall", groupedLightId = "grouped-2")
+        val HALL_ROOM = HueGroup(id = "room-2", name = "Hall", groupedLightId = "grouped-2")
         val HALL_GROUP = HueGroupedLight(id = "grouped-2", on = true, brightness = 55.0)
-        val NO_GROUP_ROOM = HueRoom(id = "room-3", name = "Garage", groupedLightId = null)
-        val ROOM_WITH_MISSING_GROUP = HueRoom(id = "room-4", name = "Attic", groupedLightId = "grouped-missing")
+        val NO_GROUP_ROOM = HueGroup(id = "room-3", name = "Garage", groupedLightId = null)
+        val ROOM_WITH_MISSING_GROUP = HueGroup(id = "room-4", name = "Attic", groupedLightId = "grouped-missing")
+        val GARDEN_ZONE = HueGroup(id = "zone-1", name = "Garden", groupedLightId = "grouped-3")
+        val GARDEN_GROUP = HueGroupedLight(id = "grouped-3", on = false, brightness = null)
     }
 }
 
@@ -696,20 +720,21 @@ private class FakeStorage : HueStorage {
 /** A [HueLighting] with no bridge: each call returns whatever the test's lambdas decide. */
 private class FakeHueLighting(
     var lightsResult: suspend () -> HueResult<List<HueLight>> = { HueResult.Ok(emptyList()) },
-    var roomsResult: suspend () -> HueResult<List<HueRoom>> = { HueResult.Ok(emptyList()) },
+    var roomsResult: suspend () -> HueResult<List<HueGroup>> = { HueResult.Ok(emptyList()) },
+    var zonesResult: suspend () -> HueResult<List<HueGroup>> = { HueResult.Ok(emptyList()) },
     var groupedLightsResult: suspend () -> HueResult<List<HueGroupedLight>> = { HueResult.Ok(emptyList()) },
 ) : HueLighting {
     /** Every on/off command sent, in order. */
-    val commands = mutableListOf<Pair<HueTarget, Boolean>>()
+    val commands = mutableListOf<Pair<HueCommandTarget, Boolean>>()
 
     /** Every brightness command sent, in order. */
-    val brightnessCommands = mutableListOf<Pair<HueTarget, Int>>()
+    val brightnessCommands = mutableListOf<Pair<HueCommandTarget, Int>>()
 
     /** What [setOn] answers; defaults to success. */
-    var onCommand: suspend (HueTarget, Boolean) -> HueResult<Unit> = { _, _ -> HueResult.Ok(Unit) }
+    var onCommand: suspend (HueCommandTarget, Boolean) -> HueResult<Unit> = { _, _ -> HueResult.Ok(Unit) }
 
     /** What [setBrightness] answers; defaults to success. */
-    var brightnessCommand: suspend (HueTarget, Int) -> HueResult<Unit> = { _, _ -> HueResult.Ok(Unit) }
+    var brightnessCommand: suspend (HueCommandTarget, Int) -> HueResult<Unit> = { _, _ -> HueResult.Ok(Unit) }
 
     /** How many times the screen opened the live subscription, and how many times it released it. */
     var connects = 0
@@ -733,12 +758,14 @@ private class FakeHueLighting(
 
     override suspend fun lights(): HueResult<List<HueLight>> = lightsResult()
 
-    override suspend fun rooms(): HueResult<List<HueRoom>> = roomsResult()
+    override suspend fun rooms(): HueResult<List<HueGroup>> = roomsResult()
+
+    override suspend fun zones(): HueResult<List<HueGroup>> = zonesResult()
 
     override suspend fun groupedLights(): HueResult<List<HueGroupedLight>> = groupedLightsResult()
 
     override suspend fun setOn(
-        target: HueTarget,
+        target: HueCommandTarget,
         on: Boolean,
     ): HueResult<Unit> {
         commands += target to on
@@ -746,7 +773,7 @@ private class FakeHueLighting(
     }
 
     override suspend fun setBrightness(
-        target: HueTarget,
+        target: HueCommandTarget,
         brightness: Int,
     ): HueResult<Unit> {
         brightnessCommands += target to brightness

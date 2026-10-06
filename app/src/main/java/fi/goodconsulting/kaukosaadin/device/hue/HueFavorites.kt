@@ -5,9 +5,9 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * The lights and rooms one bridge's operator kept, by resource id, in that bridge's own [HueStorage]
- * beside its address, app key and pin. Storing the bridge's ids rather than its names means a light
- * or room renamed on the bridge stays favorited. The whole file is one bridge's, so
+ * The lights, rooms and zones one bridge's operator kept, by resource id, in that bridge's own [HueStorage]
+ * beside its address, app key and pin. Storing the bridge's ids rather than its names means a light,
+ * room or zone renamed on the bridge stays favorited. The whole file is one bridge's, so
  * [HueCredentials.forget] takes the favorites with the rest of it.
  *
  * A kept id the bridge no longer reports is harmless: nothing here resolves ids to resources, and
@@ -19,8 +19,8 @@ internal class HueFavorites(
     /** The favorited light ids; an absent or unreadable entry reads as none kept. */
     val lightIds: Set<String> get() = read().lights
 
-    /** The favorited room ids; an absent or unreadable entry reads as none kept. */
-    val roomIds: Set<String> get() = read().rooms
+    /** The favorited room and zone ids; an absent or unreadable entry reads as none kept. */
+    val groupIds: Set<String> get() = read().groups
 
     /** Keeps [id] among the favorites, or drops it when it already is; false when the write did not stick. */
     fun toggleLight(id: String): Boolean {
@@ -28,26 +28,26 @@ internal class HueFavorites(
         return write(kept.copy(lights = kept.lights.toggled(id)))
     }
 
-    /** Keeps room [id] among the favorites, or drops it when it already is; false when the write did not stick. */
-    fun toggleRoom(id: String): Boolean {
+    /** Keeps a room's or zone's [id] among the favorites, or drops it when it already is. */
+    fun toggleGroup(id: String): Boolean {
         val kept = read()
-        return write(kept.copy(rooms = kept.rooms.toggled(id)))
+        return write(kept.copy(groups = kept.groups.toggled(id)))
     }
 
     private fun read(): Kept = decode(storage.get(FAVORITES))
 
     private fun write(kept: Kept): Boolean = storage.put(FAVORITES, encode(kept))
 
-    /** The stored favorites: the two id sets, as one value. */
+    /** The stored favorites: the light ids and the room/zone ids, as one value. */
     private data class Kept(
         val lights: Set<String> = emptySet(),
-        val rooms: Set<String> = emptySet(),
+        val groups: Set<String> = emptySet(),
     )
 
     private fun encode(kept: Kept): String =
         JSONObject()
             .put(LIGHTS, JSONArray(kept.lights.toList()))
-            .put(ROOMS, JSONArray(kept.rooms.toList()))
+            .put(GROUPS, JSONArray(kept.groups.toList()))
             .toString()
 
     // Unreadable storage reads as nothing kept rather than crashing the lighting screen.
@@ -55,7 +55,7 @@ internal class HueFavorites(
         if (value == null) return Kept()
         return try {
             val json = JSONObject(value)
-            Kept(lights = ids(json.optJSONArray(LIGHTS)), rooms = ids(json.optJSONArray(ROOMS)))
+            Kept(lights = ids(json.optJSONArray(LIGHTS)), groups = ids(json.optJSONArray(GROUPS)))
         } catch (_: JSONException) {
             Kept()
         }
@@ -71,7 +71,7 @@ internal class HueFavorites(
         /** The one entry in the bridge's file; the favorites sharing it is what makes forget clear them. */
         const val FAVORITES = "favorites"
         const val LIGHTS = "lights"
-        const val ROOMS = "rooms"
+        const val GROUPS = "groups"
     }
 }
 

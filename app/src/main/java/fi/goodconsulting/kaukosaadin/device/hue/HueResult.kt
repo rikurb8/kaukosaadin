@@ -65,7 +65,7 @@ internal object HueErrors {
     /** Maps a stream/command transport fault onto a screen message; never repeats raw exception text. */
     fun transportFailure(e: Exception): String =
         when (e) {
-            is HueStreamException -> e.message ?: UNREADABLE
+            is HueStreamException -> e.reason
             is CertificateException, is SSLException -> TRUST_CHANGED
             else -> UNREACHABLE
         }

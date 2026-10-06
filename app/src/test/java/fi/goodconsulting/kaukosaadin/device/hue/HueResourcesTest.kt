@@ -40,10 +40,21 @@ class HueResourcesTest {
         val rooms = HueResources.rooms(envelope(ROOMS))
         assertEquals(
             listOf(
-                HueRoom("room-1", "Living room", groupedLightId = "grouped-2"),
-                HueRoom("room-2", "Hall", groupedLightId = null),
+                HueGroup("room-1", "Living room", groupedLightId = "grouped-2"),
+                HueGroup("room-2", "Hall", groupedLightId = null),
             ),
             rooms,
+        )
+    }
+
+    @Test fun aZoneDecodesExactlyLikeARoom() {
+        val zones = HueResources.zones(envelope(ZONES))
+        assertEquals(
+            listOf(
+                HueGroup("zone-1", "Downstairs", groupedLightId = "grouped-9"),
+                HueGroup("zone-2", "Garden", groupedLightId = null),
+            ),
+            zones,
         )
     }
 
@@ -95,6 +106,13 @@ class HueResourcesTest {
                 {"id":"room-1","type":"room","metadata":{"name":"Living room"},
                  "services":[{"rid":"other-1","rtype":"something_else"},{"rid":"grouped-2","rtype":"grouped_light"}]},
                 {"id":"room-2","type":"room","metadata":{"name":"Hall"},"services":[]}
+            ]}"""
+
+        const val ZONES =
+            """{"errors":[],"data":[
+                {"id":"zone-1","type":"zone","metadata":{"name":"Downstairs"},
+                 "services":[{"rid":"grouped-9","rtype":"grouped_light"}]},
+                {"id":"zone-2","type":"zone","metadata":{"name":"Garden"}}
             ]}"""
 
         const val GROUPS =

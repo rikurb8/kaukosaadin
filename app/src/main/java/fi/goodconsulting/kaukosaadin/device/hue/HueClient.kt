@@ -12,8 +12,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.security.cert.CertificateException
-import javax.net.ssl.SSLException
 
 /**
  * One saved Hue Bridge, keyed by its [id]. It owns the bridge's stored app key and certificate pin
@@ -45,7 +43,7 @@ internal class HueClient(
                 if (credentials.applicationKey.isNullOrEmpty()) {
                     "Choose the bridge and press its link button to pair."
                 } else {
-                    "Bridge paired. Tap Check to verify the connection."
+                    "Bridge paired; the app key is stored on this phone."
                 },
             ),
         )
@@ -59,7 +57,6 @@ internal class HueClient(
     val host: String? get() = credentials.host
     val applicationKey: String? get() = credentials.applicationKey
     val pin: String? get() = credentials.pin
-    val paired: Boolean get() = !credentials.applicationKey.isNullOrEmpty()
 
     /** An OkHttp client locked to [host]; [tune] lets a caller set its own timeouts (e.g. the event stream). */
     fun http(
@@ -75,7 +72,7 @@ internal class HueClient(
         operation {
             HueProtocol.ipv4(address)
             val call =
-                http(address).newCall(
+                http(address) { retryOnConnectionFailure(false) }.newCall(
                     Request
                         .Builder()
                         .url("https://$address${HueProtocol.PAIRING_PATH}")
@@ -85,7 +82,7 @@ internal class HueClient(
             val body = call.execute().use { it.body?.string().orEmpty() }
             when (val result = HueProtocol.pairingResult(body)) {
                 is HuePairingResult.Paired -> {
-                    check(credentials.savePairing(address, HuePairing(result.applicationKey, result.clientKey))) {
+                    check(credentials.savePairing(address, result.applicationKey)) {
                         "The bridge paired, but the app key could not be saved. Try again."
                     }
                     Result(true, "Bridge paired; the app key is stored on this phone.")
@@ -94,21 +91,6 @@ internal class HueClient(
                     Result(false, "Waiting for the link button: press it on the bridge, then tap Pair again.")
                 is HuePairingResult.Rejected -> Result(false, result.message)
             }
-        }
-
-    /** Verifies the bridge's certificate over a real HTTPS request, without calling the lighting API. */
-    suspend fun check(address: String): Result =
-        operation {
-            HueProtocol.ipv4(address)
-            val client = http(address)
-            val request =
-                Request
-                    .Builder()
-                    .url("https://$address/")
-                    .head()
-                    .build()
-            client.newCall(request).execute().use { }
-            Result(true, "Bridge certificate verified; this phone trusts it.")
         }
 
     /** Forgets this bridge: its address, app key and certificate pin. The saved entry is the caller's. */
@@ -140,13 +122,12 @@ internal class HueClient(
             }
         }
 
-    // Our own failure text only; never the app key, the pin or peer responses.
+    // Our own failure text only; never the app key, the pin or peer responses. The TLS and
+    // unreachable cases are the same text the lighting screen shows, so [HueErrors] owns them.
     private fun message(e: Exception): String =
         when (e) {
-            is CertificateException, is SSLException ->
-                "The bridge's certificate changed or was rejected. Forget the bridge and pair it again to re-trust it."
             is IllegalArgumentException, is IllegalStateException -> e.message ?: "Invalid bridge setup."
-            else -> "Hue bridge unreachable. Check the Wi-Fi/LAN, the address, and that the bridge is on."
+            else -> HueErrors.transportFailure(e)
         }
 
     companion object {

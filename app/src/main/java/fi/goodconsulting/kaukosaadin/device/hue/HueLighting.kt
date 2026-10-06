@@ -89,10 +89,10 @@ internal class HueConnection(
 }
 
 /**
- * The lighting client tickets #9/#12 consume: the paired bridge's lights and rooms, the on/off and
- * brightness commands, and one live event subscription with its connection state. Every call returns
- * a [HueResult] or a [HueConnectionState]; nothing throws to the screen. It is an interface so a
- * screen's state can be tested against a fake without a physical bridge.
+ * The lighting client tickets #9/#12 consume: the paired bridge's lights, rooms and zones, the on/off
+ * and brightness commands, and one live event subscription with its connection state. Every call
+ * returns a [HueResult] or a [HueConnectionState]; nothing throws to the screen. It is an interface so
+ * a screen's state can be tested against a fake without a physical bridge.
  */
 internal interface HueLighting {
     /** The live-subscription state; collect to render connecting, connected or failed. */
@@ -103,18 +103,20 @@ internal interface HueLighting {
 
     suspend fun lights(): HueResult<List<HueLight>>
 
-    suspend fun rooms(): HueResult<List<HueRoom>>
+    suspend fun rooms(): HueResult<List<HueGroup>>
+
+    suspend fun zones(): HueResult<List<HueGroup>>
 
     suspend fun groupedLights(): HueResult<List<HueGroupedLight>>
 
     suspend fun setOn(
-        target: HueTarget,
+        target: HueCommandTarget,
         on: Boolean,
     ): HueResult<Unit>
 
     /** Sends brightness alone; see [HueCommands.brightnessBody] for the off-state assumption. */
     suspend fun setBrightness(
-        target: HueTarget,
+        target: HueCommandTarget,
         brightness: Int,
     ): HueResult<Unit>
 
@@ -149,17 +151,19 @@ private class BridgeHueLighting(
 
     override suspend fun lights(): HueResult<List<HueLight>> = api.lights()
 
-    override suspend fun rooms(): HueResult<List<HueRoom>> = api.rooms()
+    override suspend fun rooms(): HueResult<List<HueGroup>> = api.rooms()
+
+    override suspend fun zones(): HueResult<List<HueGroup>> = api.zones()
 
     override suspend fun groupedLights(): HueResult<List<HueGroupedLight>> = api.groupedLights()
 
     override suspend fun setOn(
-        target: HueTarget,
+        target: HueCommandTarget,
         on: Boolean,
     ): HueResult<Unit> = api.setOn(target, on)
 
     override suspend fun setBrightness(
-        target: HueTarget,
+        target: HueCommandTarget,
         brightness: Int,
     ): HueResult<Unit> = api.setBrightness(target, brightness)
 

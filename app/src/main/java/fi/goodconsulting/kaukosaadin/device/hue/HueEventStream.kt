@@ -26,8 +26,6 @@ import java.util.concurrent.TimeUnit
 
 /** One change the bridge reported for a resource the lighting screen tracks. */
 internal data class HueEvent(
-    /** The event action: `add`, `update`, `delete` or `error`. */
-    val action: String,
     val resourceId: String,
     val resourceType: String,
     /** The changed `on.on`, when the event carries it. */
@@ -38,8 +36,6 @@ internal data class HueEvent(
 
 /** Decodes one SSE frame's `data`, an array of `{type,data:[resource,...]}` events. */
 internal object HueEvents {
-    private const val ACTION_UNKNOWN = "unknown"
-
     /** A malformed frame yields no events; one bad frame must not break the live stream. */
     fun decode(data: String): List<HueEvent> =
         try {
@@ -51,23 +47,13 @@ internal object HueEvents {
 
     private fun decodeEvent(event: JSONObject?): List<HueEvent> {
         val resources = event?.optJSONArray("data") ?: return emptyList()
-        val action = event?.optString("type").orEmpty().ifBlank { ACTION_UNKNOWN }
         return (0 until resources.length()).mapNotNull { index ->
             val resource = resources.optJSONObject(index) ?: return@mapNotNull null
             val id = resource.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val type = resource.optString("type").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            HueEvent(action = action, resourceId = id, resourceType = type, on = on(resource), brightness = brightness(resource))
+            HueEvent(resourceId = id, resourceType = type, on = HueState.on(resource), brightness = HueState.brightness(resource))
         }
     }
-
-    private fun on(resource: JSONObject): Boolean? = resource.optJSONObject("on")?.takeIf { it.has("on") }?.optBoolean("on")
-
-    private fun brightness(resource: JSONObject): Double? =
-        resource
-            .optJSONObject("dimming")
-            ?.takeIf { it.has("brightness") }
-            ?.optDouble("brightness")
-            ?.takeIf { it.isFinite() }
 }
 
 /** One server-sent event frame: the optional `id` (the resume cursor) and the joined `data` payload. */
@@ -140,8 +126,8 @@ internal interface HueStreamed : Closeable {
 
 /** The bridge refused to open the event stream; carries the app's own text so it is safe to show. */
 internal class HueStreamException(
-    message: String,
-) : IOException(message)
+    val reason: String,
+) : IOException(reason)
 
 /** The real binding: an OkHttp GET whose body is read as a long-lived stream, with no read timeout. */
 internal class OkHttpHueStreamer(

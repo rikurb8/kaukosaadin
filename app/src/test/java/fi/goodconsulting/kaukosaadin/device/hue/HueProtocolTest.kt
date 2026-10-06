@@ -19,14 +19,14 @@ class HueProtocolTest {
                 """[{"success":{"username":"a4e08834-0893-4013-b646-738582ec15c9","clientkey":"client-secret"}}]""",
             )
         assertEquals(
-            HuePairingResult.Paired("a4e08834-0893-4013-b646-738582ec15c9", "client-secret"),
+            HuePairingResult.Paired("a4e08834-0893-4013-b646-738582ec15c9"),
             result,
         )
     }
 
     @Test fun aSuccessReplyWithoutAClientKeyKeepsTheAppKey() {
         val result = HueProtocol.pairingResult("""[{"success":{"username":"abc-123"}}]""")
-        assertEquals(HuePairingResult.Paired("abc-123", null), result)
+        assertEquals(HuePairingResult.Paired("abc-123"), result)
     }
 
     @Test fun type101IsTheLinkButtonNotPressedState() {
@@ -54,7 +54,7 @@ class HueProtocolTest {
 
     @Test fun anAppKeyIsOpaqueTextWithNoAssumedFormat() {
         // The bridge's key format is unverified; any non-blank username is kept verbatim.
-        assertEquals(HuePairingResult.Paired("not-a-uuid", null), HueProtocol.pairingResult("""[{"success":{"username":"not-a-uuid"}}]"""))
+        assertEquals(HuePairingResult.Paired("not-a-uuid"), HueProtocol.pairingResult("""[{"success":{"username":"not-a-uuid"}}]"""))
         assertEquals(
             HuePairingResult.Rejected("Unexpected pairing response from the bridge."),
             HueProtocol.pairingResult("""[{"success":{"username":""}}]"""),

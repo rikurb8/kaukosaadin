@@ -15,40 +15,31 @@ class HueCredentialsTest {
     private val credentials = HueCredentials(storage, key = { key })
 
     @Test fun pairingAndTrustSurviveARoundTrip() {
-        assertTrue(credentials.savePairing("192.168.1.42", HuePairing("app-key-1", "client-key-1")))
+        assertTrue(credentials.savePairing("192.168.1.42", "app-key-1"))
         assertTrue(credentials.saveTrust("192.168.1.42", "abc123"))
 
         // A fresh store over the same bytes reads the same material, as it would after a restart.
         val reloaded = HueCredentials(storage, key = { key })
         assertEquals("192.168.1.42", reloaded.host)
         assertEquals("app-key-1", reloaded.applicationKey)
-        assertEquals("client-key-1", reloaded.clientKey)
         assertEquals("abc123", reloaded.pin)
     }
 
-    @Test fun aPairingWithoutAClientKeyRoundTripsToo() {
-        credentials.savePairing("192.168.1.42", HuePairing("app-key-1", null))
-        val reloaded = HueCredentials(storage, key = { key })
-        assertEquals("app-key-1", reloaded.applicationKey)
-        assertNull(reloaded.clientKey)
-    }
-
     @Test fun theAppKeyIsStoredEncryptedNotInTheClear() {
-        credentials.savePairing("192.168.1.42", HuePairing("app-key-1", "client-key-1"))
+        credentials.savePairing("192.168.1.42", "app-key-1")
         val stored = storage.get("pairing")!!
         assertFalse(stored.contains("app-key-1"))
-        assertFalse(stored.contains("client-key-1"))
         assertNotEquals("", stored)
     }
 
     @Test fun unreadableStoredMaterialReadsAsAbsent() {
-        credentials.savePairing("192.168.1.42", HuePairing("app-key-1", null))
+        credentials.savePairing("192.168.1.42", "app-key-1")
         storage.put("pairing", "not a sealed payload")
         assertNull(HueCredentials(storage, key = { key }).applicationKey)
     }
 
     @Test fun forgetClearsEverythingKeptForTheBridge() {
-        credentials.savePairing("192.168.1.42", HuePairing("app-key-1", "client-key-1"))
+        credentials.savePairing("192.168.1.42", "app-key-1")
         credentials.saveTrust("192.168.1.42", "abc123")
         assertTrue(credentials.forget())
         assertNull(credentials.host)

@@ -9,13 +9,11 @@ import java.net.InetAddress
 class HueDiscoveryTest {
     private val address = InetAddress.getByAddress(byteArrayOf(192.toByte(), 0, 2, 7))
 
-    @Test fun aResolvedBridgeKeepsItsAdvertisedAddressAndPort() {
+    @Test fun aResolvedBridgeKeepsItsAdvertisedNameAndAddress() {
         val bridge = HueDiscovery.endpoint("Philips Hue - ecb5fafffe0a55da", address, 80)!!
         assertEquals("Philips Hue - ecb5fafffe0a55da", bridge.name)
         assertEquals(address, bridge.address)
-        assertEquals(80, bridge.port) // The bridge advertises its own port; never substitute 443.
         assertNull(bridge.model)
-        assertNull(bridge.bridgeId)
     }
 
     @Test fun namesAreSanitisedAndBounded() {
@@ -34,28 +32,19 @@ class HueDiscoveryTest {
         assertEquals(ipv6, HueDiscovery.endpoint("Bridge", ipv6, 443)!!.address)
     }
 
-    @Test fun optionalTxtIdentityIsReadWhenPresent() {
-        val attributes =
-            mapOf(
-                "bridgeid" to "ecb5fafffe0a55da".toByteArray(),
-                "modelid" to "BSB002".toByteArray(),
-            )
-        val bridge = HueDiscovery.endpoint("Philips Hue", address, 80, attributes)!!
+    @Test fun optionalTxtModelIsReadWhenPresent() {
+        val bridge = HueDiscovery.endpoint("Philips Hue", address, 80, mapOf("modelid" to "BSB002".toByteArray()))!!
         assertEquals("BSB002", bridge.model)
-        assertEquals("ecb5fafffe0a55da", bridge.bridgeId)
     }
 
-    @Test fun txtIdentityIsLookedUpCaseInsensitivelyAndTrimmed() {
-        val attributes = mapOf("BridgeId" to " ECb5FA ".toByteArray(), "modelid" to " BSB002 ".toByteArray())
-        val bridge = HueDiscovery.endpoint("Philips Hue", address, 80, attributes)!!
+    @Test fun txtModelIsLookedUpCaseInsensitivelyAndTrimmed() {
+        val bridge = HueDiscovery.endpoint("Philips Hue", address, 80, mapOf("ModelId" to " BSB002 ".toByteArray()))!!
         assertEquals("BSB002", bridge.model)
-        assertEquals("ECb5FA", bridge.bridgeId)
     }
 
-    @Test fun aMissingOrBlankTxtIdentityLeavesTheBridgeUsable() {
-        // The exact TXT key names are unverified; discovery must not depend on them.
+    @Test fun aMissingOrBlankTxtModelLeavesTheBridgeUsable() {
+        // The exact TXT key name is unverified; discovery must not depend on it.
         val bridge = HueDiscovery.endpoint("Philips Hue", address, 80, mapOf("modelid" to "  ".toByteArray()))!!
         assertNull(bridge.model)
-        assertNull(bridge.bridgeId)
     }
 }

@@ -4,38 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import org.json.JSONException
-import org.json.JSONObject
 import java.security.KeyStore
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
-
-/** The app key and its optional entertainment client key, as the bridge returned them. */
-internal data class HuePairing(
-    val applicationKey: String,
-    val clientKey: String?,
-)
-
-/** The on-device bytes of a [HuePairing]; the app key survives a restart through this. */
-internal object HuePairingCodec {
-    fun encode(pairing: HuePairing): String =
-        JSONObject()
-            .put("applicationKey", pairing.applicationKey)
-            .apply { pairing.clientKey?.let { put("clientKey", it) } }
-            .toString()
-
-    fun decode(value: String): HuePairing? =
-        try {
-            val json = JSONObject(value)
-            val applicationKey = json.optString("applicationKey").takeIf { it.isNotBlank() } ?: return null
-            HuePairing(applicationKey, json.optString("clientKey").takeIf { it.isNotBlank() })
-        } catch (_: JSONException) {
-            null
-        }
-}
 
 /**
  * The name-value seam one bridge's stored settings sit on: [HueCredentials] and [HueFavorites]. The
@@ -88,7 +62,7 @@ internal class HuePrefsStorage(
  *
  * The app key is sealed with an Android Keystore AES-GCM key (`allowBackup=false` keeps it on this
  * phone); the pin is a public-key hash and is stored as text. Credentials are read only through
- * [applicationKey]/[clientKey], and are never written to a log.
+ * [applicationKey], and are never written to a log.
  */
 internal class HueCredentials(
     private val storage: HueStorage,
@@ -96,8 +70,7 @@ internal class HueCredentials(
 ) {
     val host: String? get() = storage.get(KEY_HOST)
     val pin: String? get() = storage.get(KEY_PIN)?.takeIf { it.isNotBlank() }
-    val applicationKey: String? get() = pairing()?.applicationKey
-    val clientKey: String? get() = pairing()?.clientKey
+    val applicationKey: String? get() = storage.get(KEY_PAIRING)?.let(::open)?.takeIf { it.isNotBlank() }
 
     /** Records the bridge address and the pin trust-on-first-use accepted for it. */
     fun saveTrust(
@@ -108,8 +81,8 @@ internal class HueCredentials(
     /** Records the bridge address and the app key the link-button flow returned, sealed. */
     fun savePairing(
         host: String,
-        pairing: HuePairing,
-    ): Boolean = storage.put(KEY_HOST, host) && storage.put(KEY_PAIRING, seal(pairing))
+        applicationKey: String,
+    ): Boolean = storage.put(KEY_HOST, host) && storage.put(KEY_PAIRING, seal(applicationKey))
 
     /**
      * Clears everything the bridge's own file holds — its address, app key, pin and the operator's
@@ -117,11 +90,9 @@ internal class HueCredentials(
      */
     fun forget(): Boolean = storage.clear()
 
-    private fun pairing(): HuePairing? = storage.get(KEY_PAIRING)?.let(::open)?.let(HuePairingCodec::decode)
-
-    private fun seal(pairing: HuePairing): String {
+    private fun seal(applicationKey: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key()) }
-        val plain = HuePairingCodec.encode(pairing).toByteArray(Charsets.UTF_8)
+        val plain = applicationKey.toByteArray(Charsets.UTF_8)
         val sealed =
             try {
                 cipher.iv + cipher.doFinal(plain)

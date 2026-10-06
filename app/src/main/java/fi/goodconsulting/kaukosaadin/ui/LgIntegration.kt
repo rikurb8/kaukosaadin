@@ -85,7 +85,7 @@ private class LgCandidate(
     val fingerprint: String,
 )
 
-/** LG's part of Add device: SSDP results and the manual address fallback, then trust/PIN pairing. */
+/** LG's part of Add device: SSDP results and the manual address, then trust/PIN pairing. */
 @Suppress("CyclomaticComplexMethod") // Scan, certificate inspection and pairing share one state.
 @Composable
 private fun LgSetup(host: SetupHost) {

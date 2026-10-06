@@ -21,6 +21,9 @@ object HueProtocol {
     /** The unauthenticated endpoint that returns the app key once the link button has been pressed. */
     const val PAIRING_PATH = "/api"
 
+    /** The one text shown whenever the operator's typed address is not a numeric LAN IPv4. */
+    const val INVALID_ADDRESS = "Enter the bridge's numeric IPv4 address, not a URL."
+
     /** The v2 resource collection, e.g. `https://<bridge>/clip/v2/resource/light`. */
     const val RESOURCE_PATH = "/clip/v2/resource"
 
@@ -32,6 +35,9 @@ object HueProtocol {
 
     /** The resource type of a room, whose on/brightness live on its grouped light. */
     const val ROOM_RESOURCE = "room"
+
+    /** The resource type of a zone, whose on/brightness live on its grouped light, exactly like a room. */
+    const val ZONE_RESOURCE = "zone"
 
     /** The resource type that carries a room's (or bridge home's) aggregated on/brightness. */
     const val GROUPED_LIGHT_RESOURCE = "grouped_light"
@@ -60,7 +66,7 @@ object HueProtocol {
         success
             .optString("username")
             .takeIf { it.isNotBlank() }
-            ?.let { HuePairingResult.Paired(it, success.optString("clientkey").takeIf { key -> key.isNotBlank() }) }
+            ?.let(HuePairingResult::Paired)
 
     // 101 is the only numeric type the notes confirm; other numbers are reported without repeating
     // the bridge's (peer-controlled) description text.
@@ -75,7 +81,7 @@ object HueProtocol {
     fun ipv4(value: String): String {
         val parts = value.split('.')
         require(parts.size == 4 && parts.all { it.matches(Regex("0|[1-9][0-9]{0,2}")) && it.toInt() in 0..255 }) {
-            "Enter the bridge's numeric IPv4 address, not a URL."
+            INVALID_ADDRESS
         }
         require(parts[0].toInt() in 1..223 && parts[0] != "127" && value != "169.254.169.254") {
             "Use the bridge's LAN address."
@@ -96,10 +102,9 @@ object HueProtocol {
 
 /** The outcome of one link-button pairing attempt. */
 sealed interface HuePairingResult {
-    /** The bridge minted an app key; [clientKey] is present only when the bridge returned one. */
+    /** The bridge minted an app key, returned as its `username`. */
     data class Paired(
         val applicationKey: String,
-        val clientKey: String?,
     ) : HuePairingResult
 
     /** Error type 101: the operator has not pressed the link button yet. */
