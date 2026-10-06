@@ -24,11 +24,11 @@ class HueEventStreamTest {
 
             assertEquals(HueStreamEvent.Open, updates[0])
             assertEquals(
-                HueStreamEvent.Frame("1:0", listOf(HueEvent("update", "light-1", "light", on = true, brightness = null))),
+                HueStreamEvent.Frame("1:0", listOf(HueEvent("light-1", "light", on = true, brightness = null))),
                 updates[1],
             )
             assertEquals(
-                HueStreamEvent.Frame("2:0", listOf(HueEvent("update", "light-2", "light", on = null, brightness = 25.0))),
+                HueStreamEvent.Frame("2:0", listOf(HueEvent("light-2", "light", on = null, brightness = 25.0))),
                 updates[2],
             )
         }

@@ -25,9 +25,7 @@ class HueDiscovery(
     data class Bridge(
         val name: String,
         val address: InetAddress,
-        val port: Int,
         val model: String? = null,
-        val bridgeId: String? = null,
     )
 
     private val nsd = context.applicationContext.getSystemService(NsdManager::class.java)
@@ -176,11 +174,12 @@ class HueDiscovery(
         private const val MAX_NAME_CHARS = 160
         private const val FALLBACK_NAME = "Hue Bridge"
         private const val MODEL_KEY = "modelid"
-        private const val BRIDGE_ID_KEY = "bridgeid"
 
         /**
          * Turns a resolved `_hue._tcp` record into a bridge, or null when it cannot be reached. The
-         * `bridgeid`/`modelid` TXT keys are unverified, so they are optional display metadata only.
+         * advertised SRV port is validated but not kept: the API is always reached over HTTPS on 443,
+         * never the advertised port. The `modelid` TXT key is unverified, so it is optional display
+         * metadata only.
          */
         internal fun endpoint(
             name: String,
@@ -192,9 +191,7 @@ class HueDiscovery(
             return Bridge(
                 name = clean(name).ifBlank { FALLBACK_NAME },
                 address = address,
-                port = port,
                 model = txt(attributes, MODEL_KEY),
-                bridgeId = txt(attributes, BRIDGE_ID_KEY),
             )
         }
 

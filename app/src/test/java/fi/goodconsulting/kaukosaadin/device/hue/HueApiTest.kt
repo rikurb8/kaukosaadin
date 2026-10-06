@@ -23,16 +23,18 @@ class HueApiTest {
             assertEquals(KEY, request.header(HueProtocol.API_KEY_HEADER))
         }
 
-    @Test fun roomsAndGroupedLightsReadTheirOwnResources() =
+    @Test fun roomsZonesAndGroupedLightsReadTheirOwnResources() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
             val api = HueApi(HOST, KEY, executor)
             api.rooms()
+            api.zones()
             api.groupedLights()
 
             assertEquals(
                 listOf(
                     "https://$HOST/clip/v2/resource/room",
+                    "https://$HOST/clip/v2/resource/zone",
                     "https://$HOST/clip/v2/resource/grouped_light",
                 ),
                 executor.requests.map { it.url.toString() },
@@ -83,7 +85,7 @@ class HueApiTest {
     @Test fun setOnPutsTheOnBodyToTheLightResource() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
-            val result = HueApi(HOST, KEY, executor).setOn(HueTarget.Light("light-1"), on = true)
+            val result = HueApi(HOST, KEY, executor).setOn(HueCommandTarget.Light("light-1"), on = true)
 
             assertEquals(HueResult.Ok(Unit), result)
             val request = executor.requests.single()
@@ -96,7 +98,7 @@ class HueApiTest {
     @Test fun setOnCanTargetAGroupedLight() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
-            HueApi(HOST, KEY, executor).setOn(HueTarget.Group("grouped-2"), on = false)
+            HueApi(HOST, KEY, executor).setOn(HueCommandTarget.Group("grouped-2"), on = false)
 
             val request = executor.requests.single()
             assertEquals("https://$HOST/clip/v2/resource/grouped_light/grouped-2", request.url.toString())
@@ -106,7 +108,7 @@ class HueApiTest {
     @Test fun setBrightnessSendsOnlyDimmingAndNeverOn() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
-            val result = HueApi(HOST, KEY, executor).setBrightness(HueTarget.Light("light-1"), 63)
+            val result = HueApi(HOST, KEY, executor).setBrightness(HueCommandTarget.Light("light-1"), 63)
 
             assertEquals(HueResult.Ok(Unit), result)
             val body = JSONObject(executor.requests.single().bodyText())
@@ -120,15 +122,15 @@ class HueApiTest {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
             val api = HueApi(HOST, KEY, executor)
 
-            assertEquals(HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE), api.setBrightness(HueTarget.Light("light-1"), 101))
-            assertEquals(HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE), api.setBrightness(HueTarget.Light("light-1"), -1))
+            assertEquals(HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE), api.setBrightness(HueCommandTarget.Light("light-1"), 101))
+            assertEquals(HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE), api.setBrightness(HueCommandTarget.Light("light-1"), -1))
             assertTrue(executor.requests.isEmpty())
         }
 
     @Test fun aFailedCommandIsSentOnceAndNeverReplayed() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(503, """{"errors":[{"description":"down","type":901}]}""") }
-            val result = HueApi(HOST, KEY, executor).setOn(HueTarget.Light("light-1"), on = true)
+            val result = HueApi(HOST, KEY, executor).setOn(HueCommandTarget.Light("light-1"), on = true)
 
             assertTrue(result is HueResult.Failure)
             assertEquals(1, executor.requests.size)
@@ -138,7 +140,7 @@ class HueApiTest {
         runBlocking {
             // The bridge can answer a PUT with HTTP 200 and a v2 error envelope; a refused command must not read as success.
             val executor = FakeExecutor { HueHttpResponse(200, """{"errors":[{"description":"rejected","type":6}],"data":[]}""") }
-            val result = HueApi(HOST, KEY, executor).setOn(HueTarget.Light("light-1"), on = true)
+            val result = HueApi(HOST, KEY, executor).setOn(HueCommandTarget.Light("light-1"), on = true)
 
             assertEquals(HueResult.Failure("The bridge refused the request (Hue error 6)."), result)
             assertEquals(1, executor.requests.size)
@@ -148,8 +150,8 @@ class HueApiTest {
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
             val api = HueApi(HOST, KEY, executor)
-            api.setOn(HueTarget.Light("light-1"), on = true)
-            api.setOn(HueTarget.Light("light-1"), on = false)
+            api.setOn(HueCommandTarget.Light("light-1"), on = true)
+            api.setOn(HueCommandTarget.Light("light-1"), on = false)
 
             assertEquals(2, executor.requests.size)
             assertEquals(listOf(true, false), executor.requests.map { JSONObject(it.bodyText()).getJSONObject("on").getBoolean("on") })

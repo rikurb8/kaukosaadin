@@ -47,7 +47,10 @@ internal interface DeviceIntegration {
  * [Settings] as the device's extra settings rows, and calls [forget] from the one forget path.
  */
 internal interface DeviceControls {
-    /** The kind's main screen: the remote, its dialogs and any sub-screens it opens. */
+    /**
+     * The kind's own screen for this device: the keypad for a TV, the lighting screen for a bridge,
+     * plus any dialogs and sub-screens it opens.
+     */
     @Composable
     fun Remote(
         padding: PaddingValues,

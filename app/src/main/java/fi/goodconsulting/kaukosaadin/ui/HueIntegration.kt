@@ -95,7 +95,7 @@ private class HueCandidate(
     val name: String,
 )
 
-/** Hue's part of Add device: mDNS results and the manual address fallback, then link-button pairing. */
+/** Hue's part of Add device: mDNS results and the manual address, then link-button pairing. */
 @Suppress("CyclomaticComplexMethod") // Scan, manual entry and link-button pairing share one state.
 @Composable
 private fun HueSetup(host: SetupHost) {
@@ -178,7 +178,7 @@ private fun HueSetup(host: SetupHost) {
         TextButton(enabled = !host.busy && candidate == null && manualAddress.isNotEmpty(), onClick = {
             val address = runCatching { HueProtocol.ipv4(manualAddress) }.getOrNull()
             if (address == null) {
-                host.onMessage("Enter the bridge's numeric IPv4 address, not a URL.")
+                host.onMessage(HueProtocol.INVALID_ADDRESS)
             } else {
                 start(address, DeviceKind.Hue.label)
             }

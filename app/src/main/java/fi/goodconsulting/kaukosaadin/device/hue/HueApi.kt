@@ -33,8 +33,8 @@ internal class OkHttpHueExecutor(
         }
 }
 
-/** A resource a command can address: one light, or the grouped light that carries a room's state. */
-internal sealed interface HueTarget {
+/** A resource a command can address: one light, or the grouped light that carries a room's or zone's state. */
+internal sealed interface HueCommandTarget {
     val id: String
 
     /** The v2 path segment this target writes to, e.g. `light/<id>`. */
@@ -42,15 +42,21 @@ internal sealed interface HueTarget {
 
     data class Light(
         override val id: String,
-    ) : HueTarget {
+    ) : HueCommandTarget {
         override val path: String get() = "${HueProtocol.LIGHT_RESOURCE}/$id"
     }
 
     data class Group(
         override val id: String,
-    ) : HueTarget {
+    ) : HueCommandTarget {
         override val path: String get() = "${HueProtocol.GROUPED_LIGHT_RESOURCE}/$id"
     }
+}
+
+/** The one 0–100 brightness scale: the API refuses values outside it and the slider spans exactly it. */
+internal object HueBrightness {
+    const val MIN = 0
+    const val MAX = 100
 }
 
 /** The exact JSON bodies the two supported commands send. Nothing else is written to a light. */
@@ -69,7 +75,7 @@ internal object HueCommands {
 }
 
 /**
- * The Hue Bridge's lighting API: reads lights, rooms and grouped lights, and sends on/off and
+ * The Hue Bridge's lighting API: reads lights, rooms, zones and grouped lights, and sends on/off and
  * brightness commands. Every call returns a [HueResult]; a failure is a value, and a failed command
  * is sent exactly once and dropped, never queued or replayed.
  */
@@ -80,21 +86,23 @@ internal class HueApi(
 ) {
     suspend fun lights(): HueResult<List<HueLight>> = read(HueProtocol.LIGHT_RESOURCE, HueResources::lights)
 
-    suspend fun rooms(): HueResult<List<HueRoom>> = read(HueProtocol.ROOM_RESOURCE, HueResources::rooms)
+    suspend fun rooms(): HueResult<List<HueGroup>> = read(HueProtocol.ROOM_RESOURCE, HueResources::rooms)
+
+    suspend fun zones(): HueResult<List<HueGroup>> = read(HueProtocol.ZONE_RESOURCE, HueResources::zones)
 
     suspend fun groupedLights(): HueResult<List<HueGroupedLight>> = read(HueProtocol.GROUPED_LIGHT_RESOURCE, HueResources::groupedLights)
 
     suspend fun setOn(
-        target: HueTarget,
+        target: HueCommandTarget,
         on: Boolean,
     ): HueResult<Unit> = write(target, HueCommands.onBody(on))
 
     /** Sends brightness only; out-of-range values fail without touching the bridge. See [HueCommands]. */
     suspend fun setBrightness(
-        target: HueTarget,
+        target: HueCommandTarget,
         brightness: Int,
     ): HueResult<Unit> {
-        if (brightness !in MIN_BRIGHTNESS..MAX_BRIGHTNESS) return HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE)
+        if (brightness !in HueBrightness.MIN..HueBrightness.MAX) return HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE)
         return write(target, HueCommands.brightnessBody(brightness))
     }
 
@@ -119,7 +127,7 @@ internal class HueApi(
         }
 
     private suspend fun write(
-        target: HueTarget,
+        target: HueCommandTarget,
         body: String,
     ): HueResult<Unit> =
         guarded {
@@ -166,8 +174,6 @@ internal class HueApi(
     companion object {
         private const val HTTP_OK = 200
         private const val HTTP_SUCCESS_MAX = 299
-        private const val MIN_BRIGHTNESS = 0
-        private const val MAX_BRIGHTNESS = 100
 
         private val JSON = "application/json; charset=utf-8".toMediaType()
 

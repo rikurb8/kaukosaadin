@@ -151,6 +151,6 @@ class HueConnectionTest {
 
     private companion object {
         const val TIMEOUT_MS = 5_000L
-        val SAMPLE_EVENT = HueEvent(action = "update", resourceId = "light-1", resourceType = "light", on = true, brightness = null)
+        val SAMPLE_EVENT = HueEvent(resourceId = "light-1", resourceType = "light", on = true, brightness = null)
     }
 }

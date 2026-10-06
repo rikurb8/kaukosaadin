@@ -1,6 +1,3 @@
-// Hue's v2 resource types and the 0–100 brightness scale are protocol vocabulary, not layout literals.
-@file:Suppress("MagicNumber")
-
 package fi.goodconsulting.kaukosaadin.device.hue
 
 import org.json.JSONArray
@@ -16,15 +13,19 @@ internal data class HueLight(
     val brightness: Double?,
 )
 
-/** One room's grouped light: `on` is true when any light is on; brightness averages the on lights only. */
+/** One grouped light: `on` is true when any light is on; brightness averages the on lights only. */
 internal data class HueGroupedLight(
     val id: String,
     val on: Boolean,
     val brightness: Double?,
 )
 
-/** One room; [groupedLightId] is the `grouped_light` service that carries the room's on/brightness. */
-internal data class HueRoom(
+/**
+ * One room or zone; [groupedLightId] is the `grouped_light` service that carries its on/brightness.
+ * The bridge reports rooms and zones as separate resources with the same shape, so one type carries
+ * both.
+ */
+internal data class HueGroup(
     val id: String,
     val name: String,
     val groupedLightId: String?,
@@ -62,28 +63,36 @@ internal object HueResources {
             HueLight(
                 id = resource.optString("id"),
                 name = name(resource),
-                on = on(resource) ?: false,
-                brightness = brightness(resource),
+                on = HueState.on(resource) ?: false,
+                brightness = HueState.brightness(resource),
             )
         }
 
-    fun rooms(envelope: HueEnvelope): List<HueRoom> =
-        decode(envelope, HueProtocol.ROOM_RESOURCE) { resource ->
-            HueRoom(
-                id = resource.optString("id"),
-                name = name(resource),
-                groupedLightId = groupedLightId(resource),
-            )
-        }
+    fun rooms(envelope: HueEnvelope): List<HueGroup> = groups(envelope, HueProtocol.ROOM_RESOURCE)
+
+    fun zones(envelope: HueEnvelope): List<HueGroup> = groups(envelope, HueProtocol.ZONE_RESOURCE)
 
     fun groupedLights(envelope: HueEnvelope): List<HueGroupedLight> =
         decode(envelope, HueProtocol.GROUPED_LIGHT_RESOURCE) { resource ->
             HueGroupedLight(
                 id = resource.optString("id"),
-                on = on(resource) ?: false,
-                brightness = brightness(resource),
+                on = HueState.on(resource) ?: false,
+                brightness = HueState.brightness(resource),
             )
         }
+
+    // A room and a zone carry the same fields; only the resource type differs.
+    private fun groups(
+        envelope: HueEnvelope,
+        resource: String,
+    ): List<HueGroup> = decode(envelope, resource, ::group)
+
+    private fun group(resource: JSONObject): HueGroup =
+        HueGroup(
+            id = resource.optString("id"),
+            name = name(resource),
+            groupedLightId = groupedLightId(resource),
+        )
 
     // The list endpoint is already filtered by type; entries without a matching type or an id are junk.
     private fun <T> decode(
@@ -102,7 +111,7 @@ internal object HueResources {
         return items
     }
 
-    /** The human name sits on `metadata.name`; a light missing it falls back to its id, never to blank. */
+    /** The human name sits on `metadata.name`; a resource missing it falls back to its id, never to blank. */
     private fun name(resource: JSONObject): String =
         resource
             .optJSONObject("metadata")
@@ -110,15 +119,6 @@ internal object HueResources {
             .orEmpty()
             .trim()
             .ifBlank { resource.optString("id") }
-
-    private fun on(resource: JSONObject): Boolean? = resource.optJSONObject("on")?.takeIf { it.has("on") }?.optBoolean("on")
-
-    private fun brightness(resource: JSONObject): Double? =
-        resource
-            .optJSONObject("dimming")
-            ?.takeIf { it.has("brightness") }
-            ?.optDouble("brightness")
-            ?.takeIf { it.isFinite() }
 
     /** Found in `services[]` where `rtype == "grouped_light"`; other service types are ignored. */
     private fun groupedLightId(resource: JSONObject): String? {

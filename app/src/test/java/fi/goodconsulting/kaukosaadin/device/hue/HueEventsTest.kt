@@ -8,7 +8,7 @@ class HueEventsTest {
     @Test fun anUpdateFrameDecodesOnAndBrightness() {
         val events = HueEvents.decode(UPDATE_FRAME)
         assertEquals(
-            listOf(HueEvent(action = "update", resourceId = "light-1", resourceType = "light", on = true, brightness = 42.5)),
+            listOf(HueEvent(resourceId = "light-1", resourceType = "light", on = true, brightness = 42.5)),
             events,
         )
     }
@@ -20,7 +20,7 @@ class HueEventsTest {
                     "data":[{"id":"light-1","type":"light"}]}]""",
             )
         assertEquals(
-            listOf(HueEvent(action = "delete", resourceId = "light-1", resourceType = "light", on = null, brightness = null)),
+            listOf(HueEvent(resourceId = "light-1", resourceType = "light", on = null, brightness = null)),
             events,
         )
     }
@@ -31,7 +31,7 @@ class HueEventsTest {
                 """[{"id":"e","type":"add","creationtime":"t",
                     "data":[{"id":"gl-1","type":"grouped_light","on":{"on":false}}]}]""",
             )
-        assertEquals(listOf(HueEvent("add", "gl-1", "grouped_light", on = false, brightness = null)), events)
+        assertEquals(listOf(HueEvent("gl-1", "grouped_light", on = false, brightness = null)), events)
     }
 
     @Test fun oneEventWithSeveralResourcesBecomesSeveralChanges() {
@@ -44,8 +44,8 @@ class HueEventsTest {
             )
         assertEquals(
             listOf(
-                HueEvent("update", "light-1", "light", on = true, brightness = null),
-                HueEvent("update", "light-2", "light", on = null, brightness = 25.0),
+                HueEvent("light-1", "light", on = true, brightness = null),
+                HueEvent("light-2", "light", on = null, brightness = 25.0),
             ),
             events,
         )
