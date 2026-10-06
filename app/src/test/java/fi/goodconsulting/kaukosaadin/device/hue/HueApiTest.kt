@@ -134,6 +134,16 @@ class HueApiTest {
             assertEquals(1, executor.requests.size)
         }
 
+    @Test fun aWriteThatReturnsA200ErrorEnvelopeIsStillAFailure() =
+        runBlocking {
+            // The bridge can answer a PUT with HTTP 200 and a v2 error envelope; a refused command must not read as success.
+            val executor = FakeExecutor { HueHttpResponse(200, """{"errors":[{"description":"rejected","type":6}],"data":[]}""") }
+            val result = HueApi(HOST, KEY, executor).setOn(HueTarget.Light("light-1"), on = true)
+
+            assertEquals(HueResult.Failure("The bridge refused the request (Hue error 6)."), result)
+            assertEquals(1, executor.requests.size)
+        }
+
     @Test fun eachPressSendsItsOwnCommandAndNothingElse() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }

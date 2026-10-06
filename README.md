@@ -1,16 +1,17 @@
 # Kaukosäädin
 
 Your Android phone becomes the remote for the TVs in your
-living room: **Apple TV** and **LG webOS TVs**. It talks to them directly over your home
-Wi-Fi, with no cloud, account or bridge in between.
+living room — **Apple TV** and **LG webOS TVs** — and controls **Philips Hue** lights through a
+local Hue Bridge. It talks to everything directly over your home Wi-Fi, with no cloud account:
+the TVs are reached on the LAN, and Hue through the bridge on the same network.
 
-|  | Apple TV | LG webOS TV |
-| --- | --- | --- |
-| **Find** | Wi-Fi scan (Companion mDNS) | Wi-Fi scan (SSDP) or address by hand |
-| **Pair** | PIN shown on the TV | Pinned TLS certificate, then PIN |
-| **Navigate** | Arrows, OK, BACK (Menu), HOME (TV), Play/Pause, Volume -/+ | Arrows, OK, BACK |
-| **Extras** | App launcher; type on the phone, text appears on the TV | Wake-on-LAN |
-| **Tested on** | A real Apple TV, from a Galaxy S25 | LG G3 |
+|  | Apple TV | LG webOS TV | Hue Bridge |
+| --- | --- | --- | --- |
+| **Find** | Wi-Fi scan (Companion mDNS) | Wi-Fi scan (SSDP) or address by hand | Wi-Fi scan (Hue mDNS) or address by hand |
+| **Pair** | PIN shown on the TV | Pinned TLS certificate, then PIN | The bridge's physical link button |
+| **Control** | Arrows, OK, BACK (Menu), HOME (TV), Play/Pause, Volume -/+ | Arrows, OK, BACK | Lights and rooms: on/off and brightness |
+| **Extras** | App launcher; type on the phone, text appears on the TV | Wake-on-LAN | Favorites first; live updates from other controllers |
+| **Tested on** | A real Apple TV, from a Galaxy S25 | LG G3 | Not yet on hardware — see the [bridge handoff](docs/hue-bridge-v2.md) |
 
 Save as many devices as you like and flip between them from the picker. Pick the **Classic**
 look, or **Hacker man** if you want green-on-black.
@@ -26,20 +27,23 @@ adb shell am start -n fi.goodconsulting.kaukosaadin/.MainActivity
 
 ### Adding devices
 
-Fresh installs show **No devices added**. Tap **Find devices** to scan your Wi-Fi: LG TVs
-and Apple TVs are found together and listed with their advertised name and address, or you
-can **Enter LG TV address** by hand. Tap a device to pair it, and it is saved:
+Fresh installs show **No devices added**. Tap **Find devices** to scan your Wi-Fi: LG TVs,
+Apple TVs and Hue Bridges are found together and listed with their advertised name and address, or
+you can **Enter LG TV address** by hand (a bridge takes its own numeric IPv4 the same way). Tap a
+device to pair it, and it is saved:
 
 - **Apple TV** pairs with the PIN it shows.
 - **LG TV** shows one **Trust this TV?** dialog with an editable name and the TV's certificate
   fingerprint; **Trust & pair** pins that certificate and the TV then asks for its PIN.
+- **Hue Bridge** pairs when you press the bridge's physical link button, then tap **Pair again**.
 
-Any number of devices of either kind can be saved. The picker at the top of the remote switches
+Any number of devices of any kind can be saved. The picker at the top of the remote switches
 between them and has **Add device…**. The remote opens on the device you last used; until you pick
 one, an Apple TV is the default if one is saved. **Device settings** renames the device and
-**Forget device** (with confirmation) clears it and its pairing; for LG it also has **Re-pair** and the optional
-Wake-on-LAN settings. Upgrading from the single-slot build drops the old LG/Apple TV pairings:
-pair them again from **Find devices**.
+**Forget device** (with confirmation) clears it and its pairing; for LG it also has **Re-pair**
+and the optional Wake-on-LAN settings, and for a Hue Bridge it also clears the stored app key,
+certificate pin and favorites. Upgrading from the single-slot build drops the old LG/Apple TV
+pairings: pair them again from **Find devices**.
 
 ### Apple TV
 
@@ -94,6 +98,7 @@ app and are remembered across restarts.
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/MainActivity.kt` | Single activity; hosts Compose |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/ui/` | Compose UI (screens and components) |
 | `app/src/main/java/fi/goodconsulting/kaukosaadin/device/` | Saved-device store, LG client and Companion (Apple TV) client: crypto, discovery, pairing, presses, text input |
+| `app/src/main/java/fi/goodconsulting/kaukosaadin/device/hue/` | Hue Bridge v2 client: mDNS discovery, link-button pairing, TLS pinning, lights/rooms and the local event stream |
 | `.maestro/` | Maestro flows and workspace configuration |
 | `.dagger/modules/ci/main.dang` | The CI check: a JDK 21 container running ktlint and detekt |
 | `.github/workflows/ci.yml` | GitHub Actions entry point: installs the pinned Dagger CLI and runs the check |
