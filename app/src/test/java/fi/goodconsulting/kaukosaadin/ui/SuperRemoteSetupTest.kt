@@ -43,7 +43,7 @@ class SuperRemoteSetupTest {
         val store = MemoryStore()
         val setup = SuperRemoteSetup(store::read, store::write)
         assertTrue(setup.chooseAppleTv("atv-1"))
-        assertTrue(setup.chooseLightTarget("hue-1", "grouped-9", "Olohuone"))
+        assertTrue(setup.chooseGroupedLight("hue-1", "grouped-9", "Olohuone"))
         assertTrue(setup.chooseShortcuts(listOf(youtube, areena)))
 
         // A fresh store reading the same bytes sees the choices, as it would after a restart.
@@ -51,23 +51,23 @@ class SuperRemoteSetupTest {
         val fresh = SuperRemoteSetup(freshStore::read, freshStore::write)
         assertEquals("atv-1", fresh.bindings.appleTvDeviceId)
         assertEquals("hue-1", fresh.bindings.hueDeviceId)
-        assertEquals("grouped-9", fresh.bindings.hueTargetId)
-        assertEquals("Olohuone", fresh.bindings.hueTargetName)
+        assertEquals("grouped-9", fresh.bindings.hueGroupedLightId)
+        assertEquals("Olohuone", fresh.bindings.hueGroupedLightName)
         assertEquals(listOf(youtube, areena), fresh.bindings.shortcuts)
     }
 
     @Test fun changingTheBridgeDropsTheOldBridgesTarget() {
         val store = MemoryStore()
         val setup = SuperRemoteSetup(store::read, store::write)
-        setup.chooseLightTarget("hue-1", "grouped-9", "Olohuone")
+        setup.chooseGroupedLight("hue-1", "grouped-9", "Olohuone")
         // Re-choosing the same bridge keeps the room or zone it has.
         setup.chooseBridge("hue-1")
-        assertEquals("grouped-9", setup.bindings.hueTargetId)
+        assertEquals("grouped-9", setup.bindings.hueGroupedLightId)
         // Another bridge cannot command the old bridge's grouped light, so its target is dropped.
         setup.chooseBridge("hue-2")
         assertEquals("hue-2", setup.bindings.hueDeviceId)
-        assertNull(setup.bindings.hueTargetId)
-        assertNull(setup.bindings.hueTargetName)
+        assertNull(setup.bindings.hueGroupedLightId)
+        assertNull(setup.bindings.hueGroupedLightName)
     }
 
     @Test fun choosingOneSectionLeavesTheOthersUntouched() {
@@ -89,10 +89,10 @@ class SuperRemoteSetupTest {
                 true
             }
         setup.chooseAppleTv("atv-1")
-        setup.chooseLightTarget("hue-1", "grouped-9", "Olohuone")
+        setup.chooseGroupedLight("hue-1", "grouped-9", "Olohuone")
         setup.chooseShortcuts(listOf(youtube))
         val keys = written.flatMap { JSONObject(SuperRemoteBindings.encode(it)).keys().asSequence() }.toSet()
-        assertEquals(setOf("appleTvDeviceId", "hueDeviceId", "hueTargetId", "hueTargetName", "shortcuts"), keys)
+        assertEquals(setOf("appleTvDeviceId", "hueDeviceId", "hueGroupedLightId", "hueGroupedLightName", "shortcuts"), keys)
     }
 
     /** The store's prefs file, modelled as the one string it keeps, so a round-trip needs no Android device. */

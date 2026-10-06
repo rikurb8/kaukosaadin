@@ -3,8 +3,10 @@ package fi.goodconsulting.kaukosaadin.ui
 import fi.goodconsulting.kaukosaadin.device.companion.AppleTvApp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -97,6 +99,30 @@ class SuperRemoteAppsRowTest {
 
             assertEquals(1, refreshes)
             assertEquals(listOf("com.google.ios.youtube"), launched.map { it.bundleId })
+        }
+
+    @Test fun aRefreshAwaitsItsReadSoLeavingTheScreenCancelsIt() =
+        runBlocking {
+            val inFlight = CompletableDeferred<Unit>()
+            var completed = false
+            val row =
+                row(this, refresh = {
+                    inFlight.await()
+                    completed = true
+                })
+
+            // What the RESUMED-scoped effect does on entry: start the read and await it in place.
+            val refresh = launch { row.refresh() }
+            yield()
+
+            assertTrue("the read keeps the row busy until it finishes", row.busy.value)
+            assertFalse("the refresh does not return while the read is in flight", completed)
+
+            // Leaving RESUMED cancels the effect, so the in-flight read is cancelled with it.
+            refresh.cancelAndJoin()
+
+            assertFalse("a cancelled read leaves the row idle", row.busy.value)
+            assertFalse("the cancelled read never completed", completed)
         }
 
     /** The row as the composable builds it: the TV's report, its two calls, and the row's own scope. */

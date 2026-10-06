@@ -193,13 +193,13 @@ class SuperRemoteSectionIndependenceTest {
         val TARGET = HueCommandTarget.Group("grouped-1")
         val COMMANDS = listOf(TARGET to 100)
         val PRESSES = listOf(HidCommand.Home to PressAction.Tap)
-        val lighting = SuperRemoteLighting(BRIDGE, SuperRemoteLightTarget(TARGET.id, "Living room"))
+        val lighting = SuperRemoteLighting(BRIDGE, SuperRemoteGroupedLight(TARGET.id, "Living room"))
         val configured =
             SuperRemoteBindings(
                 appleTvDeviceId = APPLE_TV.id,
                 hueDeviceId = BRIDGE.id,
-                hueTargetId = TARGET.id,
-                hueTargetName = "Living room",
+                hueGroupedLightId = TARGET.id,
+                hueGroupedLightName = "Living room",
                 shortcuts = listOf(YOUTUBE),
             )
     }
