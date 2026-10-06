@@ -110,7 +110,10 @@ internal class HueCredentials(
         pairing: HuePairing,
     ): Boolean = storage.put(KEY_HOST, host) && storage.put(KEY_PAIRING, seal(pairing))
 
-    /** Clears the address, app key and pin; the saved-device entry is the caller's. */
+    /**
+     * Clears everything the bridge's own file holds — its address, app key, pin and the operator's
+     * favorites; the saved-device entry is the caller's.
+     */
     fun forget(): Boolean = storage.clear()
 
     private fun pairing(): HuePairing? = storage.get(KEY_PAIRING)?.let(::open)?.let(HuePairingCodec::decode)
