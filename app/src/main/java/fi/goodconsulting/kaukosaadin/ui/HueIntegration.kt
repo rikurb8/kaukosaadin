@@ -27,6 +27,7 @@ import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.hue.HueClient
 import fi.goodconsulting.kaukosaadin.device.hue.HueDiscovery
+import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
 import fi.goodconsulting.kaukosaadin.device.hue.HueProtocol
 import kotlinx.coroutines.CancellationException
@@ -58,8 +59,9 @@ private class HueControls(
         remote: RemoteActions,
     ) {
         val scope = rememberCoroutineScope()
+        val favorites = remember(client) { HueFavorites(client.storage) }
         val lighting = remember(client) { HueLighting.of(client, scope) }
-        LightingScreen(padding, remote, lighting)
+        LightingScreen(padding, remote, lighting, favorites)
     }
 
     @Composable

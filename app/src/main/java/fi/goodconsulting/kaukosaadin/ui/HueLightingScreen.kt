@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.hue.HueConnectionState
+import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueGroupedLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLight
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
@@ -47,16 +48,18 @@ private const val MAX_BRIGHTNESS = 100
  * common settings. The bridge is already a saved device, so it opens its own screen instead of adding
  * bulbs to the picker, and nothing here touches the TV remote's keys. [lighting] is null while the
  * bridge has no stored app key. Each light, and each room with a grouped light, has an on/off switch
- * and a brightness slider that sends its one command on release (ticket #10). Ticket #11 favorites
- * [LightingList], and #12 the live subscription to [LightingContent].
+ * and a brightness slider that sends its one command on release (ticket #10), and a favorite control
+ * whose change [favorites] keeps on the phone (ticket #11). #12 adds the live subscription to
+ * [LightingContent].
  */
 @Composable
 internal fun LightingScreen(
     padding: PaddingValues,
     remote: RemoteActions,
     lighting: HueLighting?,
+    favorites: HueFavorites,
 ) {
-    val controller = remember(lighting) { lighting?.let { LightingController(it) } }
+    val controller = remember(lighting, favorites) { lighting?.let { LightingController(it, favorites) } }
     Column(
         Modifier
             .fillMaxSize()
