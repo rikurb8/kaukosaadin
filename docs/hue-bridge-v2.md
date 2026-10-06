@@ -36,9 +36,9 @@ and `app/src/test/java/fi/goodconsulting/kaukosaadin/ui/LightingControllerTest.k
 | Failures | v2 error envelope, HTTP status text, transport/TLS text, out-of-range brightness, a failed command sent once and never replayed |
 | Trust | SPKI SHA-256 against a known cert, TOFU record/accept/reject, empty chain, changed pin |
 | Discovery parsing | resolved address/port kept as advertised, name sanitisation, unusable endpoints dropped, optional/unverified TXT keys |
-| Resources | light/room/grouped-light decode, missing metadata, error envelope without peer text |
+| Resources | light/room/zone/grouped-light decode, missing metadata, error envelope without peer text |
 | Event stream | SSE framing, `Accept: text/event-stream`, `If-None-Match` resume, refusal, close on cancel, resume-from-last-frame-id |
-| Lighting screen | listing, per-light and per-room toggles, brightness disabled while off, slider-release sends once, favorites first without hiding/repeating, restart persistence, forget clears them, live event applies, leaving disconnects and returning refreshes, failed stream surfaces |
+| Lighting screen | listing, per-light and per-room/zone toggles, brightness disabled while off, slider-release sends once, favorites first without hiding/repeating, restart persistence, forget clears them, live event applies, leaving disconnects and returning refreshes, failed stream surfaces |
 
 **Not covered by any test, by construction:** `HueDiscovery` and the `HueClient`/`HueTls`
 network paths need a bridge, and Compose screens and `HueSetup` need a device. There is no
@@ -120,7 +120,7 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
   `dns-sd -L "<name>" _hue._tcp` or `avahi-browse -r _hue._tcp`). Confirm whether `bridgeid`
   and `modelid` are the actual keys, what case they are in, and whether the model shown beside
   the name (`… · BSB002`) matches the bridge. The app treats these keys as optional.
-- **DISC-2 — manual fallback.** With discovery producing nothing (e.g. scan on a network where
+- **DISC-2 — manual address.** With discovery producing nothing (e.g. scan on a network where
   mDNS is filtered), enter the bridge's IPv4 in **Enter Hue Bridge address** and tap **Add**.
   Confirm a URL or hostname is refused with "Enter the bridge's numeric IPv4 address, not a
   URL.", and that a valid address starts pairing.
@@ -135,7 +135,7 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
 - **PAIR-3 — app-key format (item 8).** After pairing, confirm the app appears in the Hue app's
   paired-app list, and record the *shape* of the key the bridge minted (expected: a 36-char
   hyphenated UUID). **Never record or commit the key itself.** Note whether a `clientkey` was
-  returned (the app stores it but never uses it).
+  returned; the app requests one but ignores it, because it uses no entertainment API.
 - **PAIR-4 — firmware gate (item 9).** Record the bridge firmware version. Confirm the v2 API
   answers on that firmware, e.g.
   ```bash
@@ -147,9 +147,9 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
 ## Restart, storage and forget
 
 - **STATE-1 — restart survival.** Force-stop the app **without clearing data** and reopen it:
-  the bridge is still saved, the lighting screen lists its lights and rooms with no re-pairing,
-  and the app key still works. Check `adb logcat -s Kaukosaadin` across the whole flow and
-  confirm **no app key, pin or peer response text appears**. This closes the last two bullets of
+  the bridge is still saved, the lighting screen lists its lights, rooms and zones with no
+  re-pairing, and the app key still works. Check `adb logcat -s Kaukosaadin` across the whole flow
+  and confirm **no app key, pin or peer response text appears**. This closes the last two bullets of
   the #7 list (restart survival and logcat absence) on hardware.
 - **STATE-2 — forget.** **Device settings → Forget device** removes the saved bridge and
   reports what it clears (app key, certificate pin, favorites). Confirm the mock-only behaviour
@@ -160,15 +160,17 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
 - **STATE-3 — re-pair after forget.** Add the bridge again through the link button and confirm
   control returns.
 
-## Lights, rooms, brightness and favorites
+## Lights, rooms, zones, brightness and favorites
 
 - **LIGHT-1 — listing.** The lighting screen lists the bridge's individual lights and its
-  existing rooms with the names shown in the Hue app. A room is controlled through its grouped
-  light, so a room the bridge reports no group for is listed but not controllable.
+  existing rooms and zones with the names shown in the Hue app; rooms and zones are listed under
+  their own headings so the two can be told apart. A room or zone is controlled through its grouped
+  light, so one the bridge reports no group for is listed but not controllable.
 - **LIGHT-2 — on/off per light.** Toggle a light and confirm the physical light changes; toggle
   it back.
-- **LIGHT-3 — on/off per room.** Toggle a room and confirm every light in it changes together.
-  Confirm a room with some lights already on reports on.
+- **LIGHT-3 — on/off per room and zone.** Toggle a room and confirm every light in it changes
+  together; repeat for a zone, which can span rooms. Confirm a group with some lights already on
+  reports on.
 - **LIGHT-4 — brightness disabled while off.** With a light off, the brightness slider is
   disabled and dragging it produces no command. This is the app-side half of item 3.
 - **LIGHT-5 — slider release.** Dragging the slider sends nothing; releasing it sends exactly
@@ -187,11 +189,11 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
   fallback in the comment on `HueCommands.brightnessBody`: sending `on` and `dimming` together
   (and re-thinking the "disabled while off" rule). This is the single most important item here,
   because the spec's "brightness must not implicitly turn lights on" rule rests on it.
-  Repeat once for a grouped light if the operator wants the room case covered.
-- **LIGHT-7 — favorites ordering.** Favorite one light and one room; confirm they appear first,
-  the rest of each list stays visible below in the bridge's own order, and nothing is duplicated
-  or hidden. Restart the app and confirm the favorites are still first. Un-favoriting restores
-  the bridge's order. Forgetting the bridge clears the favorites with the rest of its file.
+  Repeat once for a grouped light if the operator wants the room or zone case covered.
+- **LIGHT-7 — favorites ordering.** Favorite one light, one room and one zone; confirm they appear
+  first, the rest of each list stays visible below in the bridge's own order, and nothing is
+  duplicated or hidden. Restart the app and confirm the favorites are still first. Un-favoriting
+  restores the bridge's order. Forgetting the bridge clears the favorites with the rest of its file.
 
 ## Live updates and lifecycle
 
@@ -226,7 +228,7 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
 
 Test #6's integration-seam refactor (`ui/DeviceIntegrations.kt`, `device/SavedDevices.kt`) on
 hardware. The detailed safe sequences and current evidence live in
-[LG verification](docs/lg-g3.md) and [Apple TV Companion](docs/apple-tv-companion.md); this
+[LG verification](lg-g3.md) and [Apple TV Companion](apple-tv-companion.md); this
 document only adds the regression checks, and does not repeat or supersede them.
 
 Precondition: install the same debug APK over the operator's existing data (`adb install -r`)
@@ -259,7 +261,7 @@ so the saved devices and pairings already in place are the ones under test.
 | Date | |
 | Bridge model / firmware | |
 | Bridge LAN IPv4 (do not commit) | |
-| Lights and rooms used | |
+| Lights, rooms and zones used | |
 | Phone model / serial / Android | |
 | APK SHA-256 (debug) | |
 | Install method / data preserved | |
@@ -279,7 +281,7 @@ addresses, MACs, app keys, pins and screenshots out of source control.
 | TLS-4 trust-on-first-use window | | | |
 | TLS-5 key rotation → visible failure → re-pair | | | |
 | DISC-1 mDNS discovery and TXT/SRV keys | | | |
-| DISC-2 manual IPv4 fallback and rejection text | | | |
+| DISC-2 manual IPv4 address and rejection text | | | |
 | PAIR-1 link-button pairing + window duration | | | |
 | PAIR-2 link-button not pressed (error 101) | | | |
 | PAIR-3 app-key format (record shape only) | | | |
@@ -287,9 +289,9 @@ addresses, MACs, app keys, pins and screenshots out of source control.
 | STATE-1 restart survival + clean logcat | | | |
 | STATE-2 forget clears credentials/pin/favorites | | | |
 | STATE-3 re-pair after forget | | | |
-| LIGHT-1 lights and rooms listing | | | |
+| LIGHT-1 lights, rooms and zones listing | | | |
 | LIGHT-2 per-light on/off | | | |
-| LIGHT-3 per-room on/off | | | |
+| LIGHT-3 per-room/zone on/off | | | |
 | LIGHT-4 brightness disabled while off | | | |
 | LIGHT-5 slider release sends once | | | |
 | LIGHT-6 brightness-only write to an off light | | | |

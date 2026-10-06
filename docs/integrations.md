@@ -9,8 +9,8 @@ through one explicitly registered object; the shell never branches on a kind.
 
 - `DeviceIntegration` — one object per kind. Registers `kind`, its `Setup` section on the Add
   device screen, and a `controls` factory for a saved device.
-- `DeviceControls` — what the integration does for one saved device: `Remote` (the main screen), its
-  own dialogs and sub-screens, `Settings` (the kind's extra rows on Device settings), `forgetDetail`
+- `DeviceControls` — what the integration does for one saved device: `Remote` (the device's
+  screen: the keypad for a TV or the lighting screen for a bridge), its own dialogs and sub-screens, `Settings` (the kind's extra rows on Device settings), `forgetDetail`
   (what forgetting also clears) and `forget()` (the kind's own local cleanup).
 - `SetupHost` — the Add device screen's shared state: the store, one `scanToken` that bumps when the
   operator taps Scan again, one `busy` flag, one progress `message`, and the `run` helper. A
@@ -51,6 +51,6 @@ main screen instead of `RemoteScreen`/`RemoteKeys`.
 
 `DeviceStore.forget(id, clearKindState)` is the one forget path: it clears everything the kind
 keeps for the device through the controls, then drops the saved device and its selection. A kind that
-must clear credentials (a Hue bridge username/key, say) implements that in its `DeviceControls.forget()`;
+must clear credentials (a Hue bridge's app key, say) implements that in its `DeviceControls.forget()`;
 it is then cleared from the same place as every other kind, so a kind never adds its own forget code
 to the shell.
