@@ -43,7 +43,7 @@ and `app/src/test/java/fi/goodconsulting/kaukosaadin/ui/LightingControllerTest.k
 **Not covered by any test, by construction:** `HueDiscovery` and the `HueClient`/`HueTls`
 network paths need a bridge, and Compose screens and `HueSetup` need a device. There is no
 `androidTest` source set, no Compose UI-test dependency and no Robolectric in this project; the
-physical checks below are how those paths are verified instead.
+physical checks below are the operator's route to verifying those paths instead.
 
 ## The `UNVERIFIED-UNTIL-PHYSICAL-BRIDGE` items
 
