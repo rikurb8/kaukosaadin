@@ -91,40 +91,38 @@ internal class HueConnection(
 /**
  * The lighting client tickets #9/#12 consume: the paired bridge's lights and rooms, the on/off and
  * brightness commands, and one live event subscription with its connection state. Every call returns
- * a [HueResult] or a [HueConnectionState]; nothing throws to the screen.
+ * a [HueResult] or a [HueConnectionState]; nothing throws to the screen. It is an interface so a
+ * screen's state can be tested against a fake without a physical bridge.
  */
-internal class HueLighting private constructor(
-    private val api: HueApi,
-    private val connection: HueConnection,
-) {
+internal interface HueLighting {
     /** The live-subscription state; collect to render connecting, connected or failed. */
-    val state: StateFlow<HueConnectionState> = connection.state
+    val state: StateFlow<HueConnectionState>
 
     /** State changes delivered while connected. */
-    val events: SharedFlow<HueEvent> = connection.events
+    val events: SharedFlow<HueEvent>
 
-    suspend fun lights(): HueResult<List<HueLight>> = api.lights()
+    suspend fun lights(): HueResult<List<HueLight>>
 
-    suspend fun rooms(): HueResult<List<HueRoom>> = api.rooms()
+    suspend fun rooms(): HueResult<List<HueRoom>>
 
-    suspend fun groupedLights(): HueResult<List<HueGroupedLight>> = api.groupedLights()
+    suspend fun groupedLights(): HueResult<List<HueGroupedLight>>
 
     suspend fun setOn(
         target: HueTarget,
         on: Boolean,
-    ): HueResult<Unit> = api.setOn(target, on)
+    ): HueResult<Unit>
 
     /** Sends brightness alone; see [HueCommands.brightnessBody] for the off-state assumption. */
     suspend fun setBrightness(
         target: HueTarget,
         brightness: Int,
-    ): HueResult<Unit> = api.setBrightness(target, brightness)
+    ): HueResult<Unit>
 
     /** Opens the event subscription; call from the screen's lifecycle (ticket #12). */
-    fun connect() = connection.connect()
+    fun connect()
 
     /** Closes the event subscription; safe to call when already disconnected. */
-    fun disconnect() = connection.disconnect()
+    fun disconnect()
 
     companion object {
         /** The lighting client for a paired [bridge], or null while it has no stored app key. */
@@ -135,7 +133,37 @@ internal class HueLighting private constructor(
             val stream = HueEventStream.of(bridge)
             val api = HueApi.of(bridge)
             if (stream == null || api == null) return null
-            return HueLighting(api, HueConnection(scope, stream::updates))
+            return BridgeHueLighting(api, HueConnection(scope, stream::updates))
         }
     }
+}
+
+/** The bridge-backed [HueLighting]; the interface is what the screen and its tests depend on. */
+private class BridgeHueLighting(
+    private val api: HueApi,
+    private val connection: HueConnection,
+) : HueLighting {
+    override val state: StateFlow<HueConnectionState> = connection.state
+
+    override val events: SharedFlow<HueEvent> = connection.events
+
+    override suspend fun lights(): HueResult<List<HueLight>> = api.lights()
+
+    override suspend fun rooms(): HueResult<List<HueRoom>> = api.rooms()
+
+    override suspend fun groupedLights(): HueResult<List<HueGroupedLight>> = api.groupedLights()
+
+    override suspend fun setOn(
+        target: HueTarget,
+        on: Boolean,
+    ): HueResult<Unit> = api.setOn(target, on)
+
+    override suspend fun setBrightness(
+        target: HueTarget,
+        brightness: Int,
+    ): HueResult<Unit> = api.setBrightness(target, brightness)
+
+    override fun connect() = connection.connect()
+
+    override fun disconnect() = connection.disconnect()
 }
