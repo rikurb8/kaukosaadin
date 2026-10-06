@@ -20,6 +20,24 @@ import kotlinx.coroutines.withContext
 /** Shown when a favorite could not be written; the list stays as it was stored, so nothing is claimed that is not there. */
 private const val FAVORITES_FAILURE = "Could not save the favorites on this phone."
 
+/** The brightness the Super remote's Bright preset writes. */
+private const val BRIGHT_BRIGHTNESS = 100
+
+/** The brightness the Super remote's Dim preset writes; unlike the lighting screen's slider, Dim turns an off target on. */
+private const val DIM_BRIGHTNESS = 20
+
+/**
+ * The Super remote's lighting presets: Bright turns the target on at 100%, Dim on at 20% and Off
+ * turns it off. The label is what the button reads, so the preset is named in one place.
+ */
+internal enum class LightingPreset(
+    val label: String,
+) {
+    Bright("Bright"),
+    Dim("Dim"),
+    Off("Off"),
+}
+
 /** What the lighting screen renders for the selected bridge: its rooms, zones, lights and grouped lights, and any failure. */
 internal data class LightingState(
     val rooms: List<HueGroup> = emptyList(),
@@ -34,7 +52,7 @@ internal data class LightingState(
     val loading: Boolean = true,
     /** The most recent failure to show, or null. A failed load or command surfaces it; a success clears it. */
     val failure: String? = null,
-    /** Target ids with a command in flight: a light id, or a room's or zone's grouped-light id. Their controls are disabled meanwhile. */
+    /** Target ids with an operation in flight — a preset, a command or a reconnect — whose controls are disabled meanwhile. */
     val busyTargets: Set<String> = emptySet(),
     /** The slider value the operator is dragging, per target id. A draft is not a command, so it is never sent. */
     val brightnessDrafts: Map<String, Int> = emptyMap(),
@@ -51,17 +69,24 @@ internal data class LightingState(
  * [LightingState.failure]; nothing throws, and no command is queued or replayed. [toggleFavorite]
  * keeps a light, room or zone among the favorites, written to the bridge's own storage, and the
  * screen lists those first through [LightingState.orderedLights], [LightingState.orderedRooms] and
- * [LightingState.orderedZones] without hiding or repeating any of them. [live] is the screen's
+ * [LightingState.orderedZones] without hiding or repeating any of them. [applyPreset] is the Super
+ * remote's one-tap Bright/Dim/Off for a room's or zone's grouped light and [reconnect] reopens the
+ * bridge's subscription and reads it again. [live] is the screen's
  * visible lifetime: it refreshes [state] on entry and merges the bridge's own changes into it until
  * it is cancelled, so a switch or another app shows up here without ever becoming a command.
  */
+@Suppress("TooManyFunctions") // The lighting screen's state, its commands and the Super remote's presets share one busy/failure owner.
 internal class LightingController(
     private val lighting: HueLighting,
-    private val favorites: HueFavorites,
+    /** The phone's favorites, or null for a caller that has no favorites to keep, like the Super remote's presets. */
+    private val favorites: HueFavorites? = null,
 ) {
     private val mutableState =
         MutableStateFlow(
-            LightingState(favoriteLights = favorites.lightIds, favoriteGroups = favorites.groupIds),
+            LightingState(
+                favoriteLights = favorites?.lightIds ?: emptySet(),
+                favoriteGroups = favorites?.groupIds ?: emptySet(),
+            ),
         )
 
     /** Everything the lighting screen shows. */
@@ -135,6 +160,48 @@ internal class LightingController(
     ) {
         if (!mutableState.value.brightnessEnabled(target)) return
         mutableState.update { it.copy(brightnessDrafts = it.brightnessDrafts + (target.id to brightness)) }
+    }
+
+    /**
+     * Sends one command for [preset] to [target]: Bright and Dim turn it on and set their brightness
+     * in one combined request, and Off turns it off. A tap while a command for [target] is in flight
+     * is dropped, so one tap is at most one command. Nothing here records which preset was applied:
+     * what the section shows comes from the bridge through [live] and [load].
+     */
+    suspend fun applyPreset(
+        target: HueCommandTarget,
+        preset: LightingPreset,
+    ) {
+        if (!begin(target.id)) return
+        try {
+            val result =
+                when (preset) {
+                    LightingPreset.Bright -> lighting.setOnWithBrightness(target, BRIGHT_BRIGHTNESS)
+                    LightingPreset.Dim -> lighting.setOnWithBrightness(target, DIM_BRIGHTNESS)
+                    LightingPreset.Off -> lighting.setOn(target, false)
+                }
+            mutableState.update { state ->
+                if (result is HueResult.Failure) state.copy(failure = result.message) else state.copy(failure = null)
+            }
+        } finally {
+            mutableState.update { it.copy(busyTargets = it.busyTargets - target.id) }
+        }
+    }
+
+    /**
+     * Re-opens the bridge's live subscription and reads its state again, for the section's Reconnect
+     * control: readiness and state are restored and nothing is sent — no preset, brightness or on/off.
+     * It shares [applyPreset]'s guard for [target], so it never runs while a preset is in flight and a
+     * duplicate tap is dropped.
+     */
+    suspend fun reconnect(target: HueCommandTarget) {
+        if (!begin(target.id)) return
+        try {
+            lighting.connect()
+            load()
+        } finally {
+            mutableState.update { it.copy(busyTargets = it.busyTargets - target.id) }
+        }
     }
 
     /**
@@ -226,10 +293,12 @@ internal class LightingController(
         id: String,
         group: Boolean,
     ) {
-        val stored = if (group) favorites.toggleGroup(id) else favorites.toggleLight(id)
+        // A preset-only caller has no favorites list to keep, so there is nothing to change.
+        val store = favorites ?: return
+        val stored = if (group) store.toggleGroup(id) else store.toggleLight(id)
         mutableState.update {
             if (stored) {
-                it.copy(failure = null, favoriteLights = favorites.lightIds, favoriteGroups = favorites.groupIds)
+                it.copy(failure = null, favoriteLights = store.lightIds, favoriteGroups = store.groupIds)
             } else {
                 it.copy(failure = FAVORITES_FAILURE)
             }
