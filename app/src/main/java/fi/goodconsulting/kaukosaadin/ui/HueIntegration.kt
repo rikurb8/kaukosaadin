@@ -2,14 +2,9 @@ package fi.goodconsulting.kaukosaadin.ui
 
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,12 +27,12 @@ import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.hue.HueClient
 import fi.goodconsulting.kaukosaadin.device.hue.HueDiscovery
+import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
 import fi.goodconsulting.kaukosaadin.device.hue.HueProtocol
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 import java.util.UUID
 
-/** Registers the Hue Bridge kind: mDNS discovery and link-button pairing, and a bridge-status screen. */
+/** Registers the Hue Bridge kind: mDNS discovery and link-button pairing, and the bridge's lighting screen. */
 internal object HueIntegration : DeviceIntegration {
     override val kind = DeviceKind.Hue
 
@@ -50,7 +45,7 @@ internal object HueIntegration : DeviceIntegration {
     ): DeviceControls = HueControls(HueClient(context, device.id))
 }
 
-/** One saved bridge's stored credentials and trust. The lighting screen of ticket #9 replaces [Remote]. */
+/** One saved bridge's stored credentials and trust, and the lighting screen that drives its lights. */
 private class HueControls(
     private val client: HueClient,
 ) : DeviceControls {
@@ -63,51 +58,8 @@ private class HueControls(
         remote: RemoteActions,
     ) {
         val scope = rememberCoroutineScope()
-        val status by client.status.collectAsState()
-        var busy by remember { mutableStateOf(false) }
-        val address = remote.current.host
-
-        fun run(block: suspend () -> Unit) {
-            if (busy) return
-            busy = true
-            scope.launch {
-                try {
-                    block()
-                } finally {
-                    busy = false
-                }
-            }
-        }
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            DevicePicker(
-                devices = remote.devices,
-                current = remote.current,
-                enabled = !busy,
-                onSelect = remote.onSelect,
-                onAddDevice = remote.onAddDevice,
-            )
-            Text("Hue Bridge", style = MaterialTheme.typography.titleLarge)
-            Text("${remote.current.name} · $address")
-            Text(if (client.paired) "App key stored on this phone" else "Not paired")
-            Text(
-                if (client.pin != null) "Certificate pinned to this bridge" else "Certificate not pinned (system CA, or not connected yet)",
-            )
-            Text(status.message)
-            Button(enabled = !busy, onClick = { run { client.check(address) } }) { Text("Check bridge") }
-            TextButton(enabled = !busy, onClick = remote.onSettings) { Text("Device settings") }
-            TextButton(onClick = remote.onGeneralSettings) { Text("General settings") }
-            Text(
-                "Lighting controls arrive in a later change; this screen shows the bridge connection only.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        val lighting = remember(client) { HueLighting.of(client, scope) }
+        LightingScreen(padding, remote, lighting)
     }
 
     @Composable
