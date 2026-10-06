@@ -119,7 +119,8 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
   the TXT keys and their values, and the SRV payload (use `dns-sd -B _hue._tcp` /
   `dns-sd -L "<name>" _hue._tcp` or `avahi-browse -r _hue._tcp`). Confirm whether `bridgeid`
   and `modelid` are the actual keys, what case they are in, and whether the model shown beside
-  the name (`… · BSB002`) matches the bridge. The app treats these keys as optional.
+  the name (`… · BSB002`) matches the bridge. The app reads only `modelid`, as optional display
+  metadata; it does not store or use the advertised port or `bridgeid`.
 - **DISC-2 — manual address.** With discovery producing nothing (e.g. scan on a network where
   mDNS is filtered), enter the bridge's IPv4 in **Enter Hue Bridge address** and tap **Add**.
   Confirm a URL or hostname is refused with "Enter the bridge's numeric IPv4 address, not a
