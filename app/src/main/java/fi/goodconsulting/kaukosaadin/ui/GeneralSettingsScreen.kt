@@ -44,6 +44,11 @@ internal enum class AppLayout(
 ) {
     Standard("standard", "Standard", "The remote as designed: full casing, wheel and VFD display."),
     Debug("debug", "Debug", "Flat panels with a live status log, for development and troubleshooting."),
+    SuperRemote(
+        "super_remote",
+        "Super remote",
+        "App shortcuts, Apple TV controls and the room's or zone's lighting on one screen.",
+    ),
     ;
 
     companion object {

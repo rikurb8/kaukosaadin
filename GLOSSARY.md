@@ -154,7 +154,8 @@ The app-wide palette: Classic or Hacker man.
 _Avoid_: skin, colours
 
 **Layout**:
-The app-wide remote presentation: Standard (full casing, wheel and VFD) or Debug (flat panels with a live status log).
+The app-wide remote presentation: Standard (full casing, wheel and VFD), Debug (flat panels with a live status
+log) or Super remote (app shortcuts, Apple TV controls and lighting on one screen).
 _Avoid_: view mode, style
 
 **General settings**:
