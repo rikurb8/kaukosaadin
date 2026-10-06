@@ -21,4 +21,10 @@ class AppThemeTest {
         assertEquals("super_remote", AppLayout.SuperRemote.id)
         assertEquals(AppLayout.SuperRemote, AppLayout.fromId("super_remote"))
     }
+
+    @Test fun addingTheSuperRemoteLayoutKeepsTheOtherLayoutsAndBothThemesOffered() {
+        // The settings screen offers every entry, and these ids are what an install already stores.
+        assertEquals(listOf("standard", "debug", "super_remote"), AppLayout.entries.map { it.id })
+        assertEquals(listOf("classic", "hacker_man"), AppTheme.entries.map { it.id })
+    }
 }
