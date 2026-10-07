@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.lgtvremote.discovery.TVDiscovery
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
@@ -38,8 +39,16 @@ import java.util.UUID
 internal object LgIntegration : DeviceIntegration {
     override val kind = DeviceKind.Lg
 
-    override suspend fun scan(context: Context): List<Candidate> =
-        scanLg(context).map { tv -> LgCandidate(host = tv.ip, name = if (tv.name == tv.ip) DeviceKind.Lg.label else tv.name) }
+    override suspend fun scan(
+        context: Context,
+        onFound: (List<Candidate>) -> Unit,
+    ): List<Candidate> {
+        val tvs = scanLg(context) { onFound(it.map(::candidate)) }
+        return tvs.map(::candidate)
+    }
+
+    private fun candidate(tv: TVDiscovery.DiscoveredTV) =
+        LgCandidate(host = tv.ip, name = if (tv.name == tv.ip) DeviceKind.Lg.label else tv.name)
 
     override val addsByAddress = true
 
@@ -163,16 +172,7 @@ private fun LgPairing(
         step == LgStep.Checking ->
             PairingStep(DeviceKind.Lg, "Checking ${candidate.name}…", busy = true, secondary = cancel)
         step == LgStep.Confirm ->
-            PairingStep(
-                DeviceKind.Lg,
-                "Add ${candidate.name}",
-                message = "The TV will show a PIN to finish.",
-                primary = StepAction("Connect") { confirmed.complete(Unit) },
-                secondary = cancel,
-            ) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                LgSecurityDetails(fingerprint)
-            }
+            LgConfirmStep(candidate.name, name, fingerprint, cancel, onName = { name = it }, onConnect = { confirmed.complete(Unit) })
         awaitingPin ->
             PairingStep(
                 DeviceKind.Lg,
@@ -192,6 +192,28 @@ private fun LgPairing(
                 busy = true,
                 secondary = cancel,
             )
+    }
+}
+
+/** The trust confirmation, without inspecting or pairing with a TV. */
+@Composable
+internal fun LgConfirmStep(
+    discoveredName: String,
+    name: String,
+    fingerprint: String,
+    cancel: StepAction,
+    onName: (String) -> Unit,
+    onConnect: () -> Unit,
+) {
+    PairingStep(
+        DeviceKind.Lg,
+        "Add $discoveredName",
+        message = "The TV will show a PIN to finish.",
+        primary = StepAction("Connect", onClick = onConnect),
+        secondary = cancel,
+    ) {
+        OutlinedTextField(name, onName, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        LgSecurityDetails(fingerprint)
     }
 }
 

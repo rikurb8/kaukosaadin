@@ -59,8 +59,16 @@ class FoundDevicesTest {
         assertEquals("Hue Bridge · BSB002", subtitles["10.0.0.5"])
     }
 
-    @Test fun aKindStillScanningKeepsTheScanOpen() {
-        val view = mergeScan(mapOf(DeviceKind.AppleTv to found(lounge), DeviceKind.Lg to ScanOutcome.Pending), emptyList(), order)
+    @Test fun aKindStillScanningListsWhatItHasFoundSoFar() {
+        val view =
+            mergeScan(
+                mapOf(
+                    DeviceKind.AppleTv to ScanOutcome.Scanning(listOf(lounge)),
+                    DeviceKind.Lg to ScanOutcome.Scanning(emptyList()),
+                ),
+                emptyList(),
+                order,
+            )
         assertTrue(view.scanning)
         assertEquals("Looking for devices on your Wi-Fi…", view.headline)
         assertEquals(listOf(lounge), view.rows.map { it.candidate })

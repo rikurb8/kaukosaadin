@@ -37,10 +37,16 @@ import java.util.UUID
 internal object HueIntegration : DeviceIntegration {
     override val kind = DeviceKind.Hue
 
-    override suspend fun scan(context: Context): List<Candidate> =
-        HueDiscovery(context).scan().map { bridge ->
-            HueCandidate(host = bridge.address.hostAddress.orEmpty(), name = bridge.name, detail = bridge.model)
-        }
+    override suspend fun scan(
+        context: Context,
+        onFound: (List<Candidate>) -> Unit,
+    ): List<Candidate> {
+        val bridges = HueDiscovery(context).scan { onFound(it.map(::candidate)) }
+        return bridges.map(::candidate)
+    }
+
+    private fun candidate(bridge: HueDiscovery.Bridge) =
+        HueCandidate(host = bridge.address.hostAddress.orEmpty(), name = bridge.name, detail = bridge.model)
 
     override val addsByAddress = true
 
@@ -164,7 +170,7 @@ private fun HuePairing(
 
 /** Asks for the link button and counts down the wait, which [awaitLinkButton] runs meanwhile. */
 @Composable
-private fun PressLinkButton(
+internal fun PressLinkButton(
     name: String,
     cancel: StepAction,
 ) {

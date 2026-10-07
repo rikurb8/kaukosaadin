@@ -32,7 +32,10 @@ class HueDiscovery(
     private val lock = Mutex()
 
     @Suppress("DEPRECATION") // Serialized resolveService supports the app's API 29 floor.
-    suspend fun scan(timeoutMs: Long = DEFAULT_TIMEOUT_MS): List<Bridge> =
+    suspend fun scan(
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        onFound: (List<Bridge>) -> Unit = {},
+    ): List<Bridge> =
         withContext(Dispatchers.IO) {
             require(timeoutMs in MIN_TIMEOUT_MS..MAX_TIMEOUT_MS) {
                 "Discovery timeout must be $MIN_TIMEOUT_MS–$MAX_TIMEOUT_MS ms."
@@ -58,6 +61,7 @@ class HueDiscovery(
                                 known.remove(event.name)
                                 pending.remove(event.name)
                                 bridges.remove(event.name)
+                                onFound(bridges.values.toList())
                             }
                             is Event.Resolved -> {
                                 resolving = null
@@ -66,6 +70,7 @@ class HueDiscovery(
                                     event.info?.let { info ->
                                         endpoint(event.request.serviceName, info.host, info.port, info.attributes)?.let {
                                             bridges[event.request.serviceName] = it
+                                            onFound(bridges.values.toList())
                                         }
                                     }
                                 }

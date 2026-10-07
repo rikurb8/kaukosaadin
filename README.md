@@ -96,6 +96,10 @@ app and are remembered across restarts.
   with a live timestamped status log, for development and troubleshooting) or **Super remote**
   (one saved Apple TV's app shortcuts and controls with one saved room's or zone's lighting on
   one screen).
+- **Reset › Clear all app data**: after a confirmation, deletes everything the app keeps — every
+  saved device and its pairing, the Super remote's shortcuts and bindings, and these settings —
+  and restarts as a fresh install. The TVs and the bridge have to be paired again; nothing on the
+  TVs, the bridge or their pairings there is touched.
 
 ## Repository layout
 
@@ -169,6 +173,26 @@ No Android Studio is required; everything below is command line.
 
 APK output: `app/build/outputs/apk/debug/app-debug.apk`. The wrapper is checked in, so a
 fresh checkout only needs the prerequisites above.
+
+## Device-flow screenshots (no emulator)
+
+Compose preview screenshot tests render the real device-flow UI with fixed sample data,
+without discovery, pairing or network calls. Previews live in `app/src/screenshotTest/kotlin/`.
+
+```bash
+./gradlew :app:updateDebugScreenshotTest    # approve intentional visual changes
+./gradlew :app:validateDebugScreenshotTest  # compare against the committed PNGs
+```
+
+Reference images: `app/src/screenshotTestDebug/reference/`. Comparison report:
+`app/build/reports/screenshotTest/preview/debug/index.html`. Inspect new images before
+committing them; include commit-pinned raw image URLs in UI PRs. Pairing captures show
+step content only, without the modal sheet's drag handle, keyboard or hardware interaction.
+The General settings capture is taller to show its full scrollable content.
+
+These host-rendered images are review/regression evidence, not physical-device verification.
+The screenshot plugin is experimental and these tasks require the Android SDK above;
+they are not part of the SDK-free CI gate.
 
 ## Continuous integration
 

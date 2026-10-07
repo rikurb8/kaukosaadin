@@ -1,5 +1,6 @@
 package fi.goodconsulting.kaukosaadin.ui
 
+import android.app.ActivityManager
 import android.content.Context
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -96,6 +97,11 @@ fun KaukosaadinApp() {
                     }, layout = layout, onLayout = {
                         layout = it
                         preferences.edit().putString("layout", it.id).apply()
+                    }, onClearAllData = {
+                        // The platform's own reset: it deletes every preference, file and key the
+                        // app owns and then kills the process, so the next launch is a fresh
+                        // install by definition rather than by our enumeration of what to clear.
+                        context.getSystemService(ActivityManager::class.java)?.clearApplicationUserData()
                     }, onBack = toRemote)
                 screen == Screen.AddDevice ->
                     AddDeviceScreen(innerPadding, store, onBack = { screen = addFrom }, onAdded = { screen = addFrom })
@@ -214,7 +220,7 @@ private fun SuperRemoteRoute(
 }
 
 @Composable
-private fun EmptyRemoteScreen(
+internal fun EmptyRemoteScreen(
     contentPadding: PaddingValues,
     onFindDevices: () -> Unit,
     onGeneralSettings: () -> Unit,

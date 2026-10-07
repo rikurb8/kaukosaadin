@@ -12,11 +12,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -56,6 +63,11 @@ internal enum class AppLayout(
     }
 }
 
+/**
+ * App-wide settings: appearance, which applies to every device, and [onClearAllData], the reset
+ * that returns the app to a fresh install. Reset is confirmed rather than toggled, so the
+ * destructive half cannot be reached by a stray tap.
+ */
 @Composable
 internal fun GeneralSettingsScreen(
     padding: PaddingValues,
@@ -63,9 +75,11 @@ internal fun GeneralSettingsScreen(
     onTheme: (AppTheme) -> Unit,
     layout: AppLayout,
     onLayout: (AppLayout) -> Unit,
+    onClearAllData: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
+    var confirmingReset by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -80,7 +94,46 @@ internal fun GeneralSettingsScreen(
         ChoiceGroup(AppTheme.entries, theme, { it.label }, { it.description }, onTheme)
         Text("Layout", style = MaterialTheme.typography.titleMedium)
         ChoiceGroup(AppLayout.entries, layout, { it.label }, { it.description }, onLayout)
+        Text("Reset", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Clears everything the app keeps: every saved device and its pairing, the Super remote's " +
+                "shortcuts and bindings, and these settings. The TVs and bridge have to be paired again.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(
+            onClick = { confirmingReset = true },
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        ) {
+            Text("Clear all app data")
+        }
     }
+    if (confirmingReset) {
+        ClearAllDataDialog(onConfirm = onClearAllData, onDismiss = { confirmingReset = false })
+    }
+}
+
+@Composable
+internal fun ClearAllDataDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Clear all app data?") },
+        text = {
+            Text(
+                "Every saved device is forgotten and its pairing is deleted, along with the Super " +
+                    "remote's shortcuts and bindings and these settings. The app restarts with no " +
+                    "devices added, like a fresh install.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text("Clear all app data")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** Radio list for one setting; theme and layout share it. */

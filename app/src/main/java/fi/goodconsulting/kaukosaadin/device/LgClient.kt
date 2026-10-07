@@ -44,17 +44,24 @@ import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.channels.Channel as PinChannel
 
 /** Read-only SSDP scan for awake LG TVs; replies are neither identity nor pairing evidence. */
-suspend fun scanLg(context: Context): List<TVDiscovery.DiscoveredTV> =
+suspend fun scanLg(
+    context: Context,
+    onFound: (List<TVDiscovery.DiscoveredTV>) -> Unit = {},
+): List<TVDiscovery.DiscoveredTV> =
     withContext(Dispatchers.IO) {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val multicast = wifi.createMulticastLock("lg-discovery").apply { setReferenceCounted(false) }
         try {
             multicast.acquire()
-            TVDiscovery().scanNetwork().filter { runCatching { LgProtocol.ipv4(it.ip) }.isSuccess }
+            val tvs = TVDiscovery().scanNetwork(onFound = { onFound(usable(it)) })
+            usable(tvs)
         } finally {
             if (multicast.isHeld) multicast.release()
         }
     }
+
+/** The replies that are actually candidate TVs: every update and the finished list go through here. */
+private fun usable(tvs: List<TVDiscovery.DiscoveredTV>) = tvs.filter { runCatching { LgProtocol.ipv4(it.ip) }.isSuccess }
 
 /** One saved LG TV, keyed by its [id]; one operation at a time, never queues or replays navigation. */
 @Suppress("TooManyFunctions")

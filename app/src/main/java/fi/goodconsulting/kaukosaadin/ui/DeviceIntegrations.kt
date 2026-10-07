@@ -31,8 +31,13 @@ internal interface DeviceIntegration {
     /**
      * One bounded scan for this kind's devices on the LAN; throws when the scan itself fails. Add a
      * device runs every registered kind's scan side by side and lists the results together.
+     * [onFound] is called with everything found so far each time a device answers, so the list fills
+     * in without waiting for the scan window to close; the returned list is the finished result.
      */
-    suspend fun scan(context: Context): List<Candidate>
+    suspend fun scan(
+        context: Context,
+        onFound: (List<Candidate>) -> Unit,
+    ): List<Candidate>
 
     /** Whether the operator can add this kind by typing its address when the scan misses it. */
     val addsByAddress: Boolean get() = false

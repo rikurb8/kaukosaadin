@@ -182,7 +182,8 @@ log) or Super remote (app shortcuts, Apple TV controls and lighting on one scree
 _Avoid_: view mode, style
 
 **General settings**:
-App-wide appearance settings, shared by every device.
+App-wide settings shared by every device: the theme, the layout, and the reset that
+clears everything for a fresh install.
 _Avoid_: settings
 
 **Device settings**:

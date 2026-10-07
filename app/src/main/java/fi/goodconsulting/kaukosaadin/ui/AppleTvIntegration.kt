@@ -27,7 +27,13 @@ import java.util.UUID
 internal object AppleTvIntegration : DeviceIntegration {
     override val kind = DeviceKind.AppleTv
 
-    override suspend fun scan(context: Context): List<Candidate> = CompanionDiscovery(context).scan().map(::AppleTvCandidate)
+    override suspend fun scan(
+        context: Context,
+        onFound: (List<Candidate>) -> Unit,
+    ): List<Candidate> {
+        val devices = CompanionDiscovery(context).scan { onFound(it.map(::AppleTvCandidate)) }
+        return devices.map(::AppleTvCandidate)
+    }
 
     override fun controls(
         context: Context,
@@ -136,18 +142,10 @@ private fun AppleTvPairing(
                 secondary = cancel,
             )
         awaitingPin ->
-            PairingStep(
-                DeviceKind.AppleTv,
-                "Enter the PIN",
-                message = "Type the 4-digit PIN shown on ${candidate.name}.",
-                error = pinError,
-                secondary = cancel,
-            ) {
-                PinField(pin, onValue = {
-                    pin = it
-                    if (it.length == APPLE_TV_PIN_LENGTH) submit()
-                }, maxLength = APPLE_TV_PIN_LENGTH, onDone = ::submit)
-            }
+            AppleTvPinStep(candidate.name, pin, pinError, cancel, onPin = {
+                pin = it
+                if (it.length == APPLE_TV_PIN_LENGTH) submit()
+            }, onSubmit = ::submit)
         else ->
             PairingStep(
                 DeviceKind.AppleTv,
@@ -156,6 +154,27 @@ private fun AppleTvPairing(
                 busy = true,
                 secondary = cancel,
             )
+    }
+}
+
+/** The PIN prompt, without starting a pairing connection. */
+@Composable
+internal fun AppleTvPinStep(
+    name: String,
+    pin: String,
+    error: String?,
+    cancel: StepAction,
+    onPin: (String) -> Unit,
+    onSubmit: () -> Unit,
+) {
+    PairingStep(
+        DeviceKind.AppleTv,
+        "Enter the PIN",
+        message = "Type the 4-digit PIN shown on $name.",
+        error = error,
+        secondary = cancel,
+    ) {
+        PinField(pin, onValue = onPin, maxLength = APPLE_TV_PIN_LENGTH, onDone = onSubmit)
     }
 }
 

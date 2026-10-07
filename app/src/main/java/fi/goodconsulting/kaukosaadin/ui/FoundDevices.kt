@@ -5,8 +5,12 @@ import fi.goodconsulting.kaukosaadin.device.SavedDevice
 
 /** Where one kind's scan stands on Add a device. */
 internal sealed interface ScanOutcome {
-    data object Pending : ScanOutcome
+    /** Still scanning; [candidates] is what has answered so far, empty until the first reply. */
+    data class Scanning(
+        val candidates: List<Candidate>,
+    ) : ScanOutcome
 
+    /** Finished; [candidates] is everything the scan found. */
     data class Found(
         val candidates: List<Candidate>,
     ) : ScanOutcome
@@ -14,6 +18,15 @@ internal sealed interface ScanOutcome {
     /** The scan itself failed; its cause is logged where the scan runs, the screen only says what to try. */
     data object Failed : ScanOutcome
 }
+
+/** What this kind has to list, whether it is still scanning or has finished. */
+private val ScanOutcome?.foundSoFar: List<Candidate>
+    get() =
+        when (this) {
+            is ScanOutcome.Scanning -> candidates
+            is ScanOutcome.Found -> candidates
+            ScanOutcome.Failed, null -> emptyList()
+        }
 
 /** One scanned device as Add a device lists it. */
 internal data class ScanRow(
@@ -40,14 +53,15 @@ internal data class ScanView(
 
 /**
  * Merges each kind's [outcomes] into one list: devices not yet [saved] first, then by kind in
- * [order] and by name. A kind missing from [outcomes] counts as still scanning.
+ * [order] and by name. A kind missing from [outcomes] counts as still scanning, and a kind still
+ * scanning already lists what it has found.
  */
 internal fun mergeScan(
     outcomes: Map<DeviceKind, ScanOutcome>,
     saved: List<SavedDevice>,
     order: List<DeviceKind> = DeviceIntegrations.all.map { it.kind },
 ): ScanView {
-    val candidates = order.flatMap { (outcomes[it] as? ScanOutcome.Found)?.candidates.orEmpty() }
+    val candidates = order.flatMap { outcomes[it].foundSoFar }
     val nameCounts = candidates.groupingBy { it.name.lowercase() }.eachCount()
     val rows =
         candidates
@@ -62,7 +76,7 @@ internal fun mergeScan(
                     .thenBy { order.indexOf(it.candidate.kind) }
                     .thenBy { it.candidate.name.lowercase() },
             )
-    val scanning = order.any { (outcomes[it] ?: ScanOutcome.Pending) == ScanOutcome.Pending }
+    val scanning = order.any { outcomes[it] is ScanOutcome.Scanning || outcomes[it] == null }
     val failed = order.filter { outcomes[it] == ScanOutcome.Failed }
     val allFailed = failed.size == order.size
     val newCount = rows.count { !it.saved }

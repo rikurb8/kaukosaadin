@@ -81,6 +81,26 @@ fun AddDeviceScreen(
         })
     }
 
+    AddDeviceContent(
+        padding,
+        view,
+        onBack = onBack,
+        onScanAgain = { scanToken++ },
+        onPair = { pairing = it },
+        onManual = { manual = true },
+    )
+}
+
+/** The scan's visible state, independent of discovery and pairing lifetimes. */
+@Composable
+internal fun AddDeviceContent(
+    padding: PaddingValues,
+    view: ScanView,
+    onBack: () -> Unit,
+    onScanAgain: () -> Unit,
+    onPair: (Candidate) -> Unit,
+    onManual: () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -96,13 +116,13 @@ fun AddDeviceScreen(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        ScanStatus(view, onScanAgain = { scanToken++ })
+        ScanStatus(view, onScanAgain = onScanAgain)
         view.rows.forEach { row ->
             DeviceCard(
                 kind = row.candidate.kind,
                 title = row.candidate.name,
                 subtitle = row.subtitle,
-                onClick = if (row.saved) null else ({ pairing = row.candidate }),
+                onClick = if (row.saved) null else ({ onPair(row.candidate) }),
                 dimmed = row.saved,
                 tag = if (row.saved) "Added" else null,
             )
@@ -111,13 +131,14 @@ fun AddDeviceScreen(
             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (!view.scanning && view.newCount == 0) NotFoundTips()
-        TextButton(onClick = { manual = true }) { Text("Can't find your device?") }
+        TextButton(onClick = onManual) { Text("Can't find your device?") }
     }
 }
 
 /**
  * Every registered kind's scan, side by side, restarted whenever [token] changes. Each kind's
- * outcome lands as soon as that kind finishes, so the list fills in as devices answer.
+ * outcome lands as soon as that kind finishes, and each device of that kind is listed as soon as the
+ * kind's scan reports it, so the list fills in while the scans are still running.
  */
 @Suppress("TooGenericExceptionCaught") // Any failure of one kind's scan is that kind's failure; the cause is logged.
 @Composable
@@ -125,13 +146,14 @@ private fun rememberScan(token: Int): Map<DeviceKind, ScanOutcome> {
     val context = LocalContext.current.applicationContext
     val outcomes = remember { mutableStateMapOf<DeviceKind, ScanOutcome>() }
     LaunchedEffect(token) {
-        DeviceIntegrations.all.forEach { outcomes[it.kind] = ScanOutcome.Pending }
+        DeviceIntegrations.all.forEach { outcomes[it.kind] = ScanOutcome.Scanning(emptyList()) }
         coroutineScope {
             DeviceIntegrations.all.forEach { integration ->
                 launch {
+                    val onFound = { found: List<Candidate> -> outcomes[integration.kind] = ScanOutcome.Scanning(found) }
                     outcomes[integration.kind] =
                         try {
-                            ScanOutcome.Found(integration.scan(context))
+                            ScanOutcome.Found(integration.scan(context, onFound))
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
