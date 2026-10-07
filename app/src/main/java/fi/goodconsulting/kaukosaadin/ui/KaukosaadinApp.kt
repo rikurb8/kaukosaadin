@@ -1,5 +1,6 @@
 package fi.goodconsulting.kaukosaadin.ui
 
+import android.app.ActivityManager
 import android.content.Context
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -27,13 +28,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import fi.goodconsulting.kaukosaadin.device.DeviceStore
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 
-/** Where the app is; every screen but the remote returns to it. */
-private enum class Screen { Remote, AddDevice, DeviceSettings, GeneralSettings, SuperRemoteSetup }
+/** Where the app is; the remote is where a screen returns unless it was opened from another. */
+private enum class Screen { Remote, AddDevice, Devices, DeviceSettings, GeneralSettings, SuperRemoteSetup }
 
 /**
  * The app shell: the saved devices, the screen router, theme/layout preferences and the empty
@@ -41,6 +43,7 @@ private enum class Screen { Remote, AddDevice, DeviceSettings, GeneralSettings, 
  * [DeviceIntegrations] is the register of kinds. The Super remote layout drives [SuperRemoteStore]'s
  * own bindings instead of the selected device.
  */
+@Suppress("LongMethod") // The one screen router: every route is a branch of the same when.
 @Composable
 fun KaukosaadinApp() {
     val context = LocalContext.current.applicationContext
@@ -57,9 +60,30 @@ fun KaukosaadinApp() {
     var layout by remember { mutableStateOf(AppLayout.fromId(preferences.getString("layout", null))) }
     var screen by rememberSaveable { mutableStateOf(Screen.Remote) }
 
+    // Device settings opens for any saved device from Devices, or for the selected one from the remote.
+    var settingsId by rememberSaveable { mutableStateOf<String?>(null) }
+    var settingsFrom by rememberSaveable { mutableStateOf(Screen.Remote) }
+
+    // Add a device and Device settings each return to the screen that opened them.
+    var addFrom by rememberSaveable { mutableStateOf(Screen.Remote) }
+
     val colors = palette(theme)
     SystemBars(colors)
     val toRemote = { screen = Screen.Remote }
+    val toDevices = { screen = Screen.Devices }
+    val openAdd = { from: Screen ->
+        addFrom = from
+        screen = Screen.AddDevice
+    }
+
+    fun openSettings(
+        device: SavedDevice?,
+        from: Screen,
+    ) {
+        settingsId = device?.id
+        settingsFrom = from
+        screen = Screen.DeviceSettings
+    }
     MaterialTheme(colorScheme = colors) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -73,18 +97,49 @@ fun KaukosaadinApp() {
                     }, layout = layout, onLayout = {
                         layout = it
                         preferences.edit().putString("layout", it.id).apply()
+                    }, onClearAllData = {
+                        // The platform's own reset: it deletes every preference, file and key the
+                        // app owns and then kills the process, so the next launch is a fresh
+                        // install by definition rather than by our enumeration of what to clear.
+                        context.getSystemService(ActivityManager::class.java)?.clearApplicationUserData()
                     }, onBack = toRemote)
-                screen == Screen.AddDevice -> AddDeviceScreen(innerPadding, store, onBack = toRemote, onAdded = toRemote)
+                screen == Screen.AddDevice ->
+                    AddDeviceScreen(innerPadding, store, onBack = { screen = addFrom }, onAdded = { screen = addFrom })
+                screen == Screen.Devices ->
+                    DevicesScreen(
+                        innerPadding,
+                        store = store,
+                        devices = devices,
+                        current = current,
+                        onSelect = { store.select(it.id) },
+                        onOpen = { openSettings(it, from = Screen.Devices) },
+                        onAddDevice = { openAdd(Screen.Devices) },
+                        onBack = toRemote,
+                    )
                 current == null || controls == null ->
                     EmptyRemoteScreen(
                         innerPadding,
-                        onFindDevices = { screen = Screen.AddDevice },
+                        onFindDevices = { openAdd(Screen.Remote) },
                         onGeneralSettings = { screen = Screen.GeneralSettings },
                     )
-                screen == Screen.DeviceSettings ->
-                    DeviceSettingsScreen(innerPadding, current, store, controls, onBack = toRemote)
+                screen == Screen.DeviceSettings -> {
+                    val device = devices.firstOrNull { it.id == settingsId } ?: current
+                    val deviceControls =
+                        if (device.id == current.id) {
+                            controls
+                        } else {
+                            remember(device.id) { DeviceIntegrations.of(device.kind).controls(context, device) }
+                        }
+                    DeviceSettingsScreen(innerPadding, device, store, deviceControls, onBack = { screen = settingsFrom })
+                }
                 layout == AppLayout.SuperRemote ->
-                    SuperRemoteRoute(innerPadding, devices, setup = screen == Screen.SuperRemoteSetup) { screen = it }
+                    SuperRemoteRoute(
+                        innerPadding,
+                        devices,
+                        setup = screen == Screen.SuperRemoteSetup,
+                        onScreen = { screen = it },
+                        onAddDevice = { openAdd(Screen.SuperRemoteSetup) },
+                    )
                 else -> {
                     val remote =
                         RemoteActions(
@@ -92,8 +147,9 @@ fun KaukosaadinApp() {
                             current = current,
                             layout = layout,
                             onSelect = { store.select(it.id) },
-                            onAddDevice = { screen = Screen.AddDevice },
-                            onSettings = { screen = Screen.DeviceSettings },
+                            onAddDevice = { openAdd(Screen.Remote) },
+                            onDevices = toDevices,
+                            onSettings = { openSettings(current, from = Screen.Remote) },
                             onGeneralSettings = { screen = Screen.GeneralSettings },
                         )
                     controls.Remote(innerPadding, remote)
@@ -129,6 +185,7 @@ private fun SystemBars(colors: ColorScheme) {
  * bindings the Super remote reads and a choice shows up there without a restart. [setup] picks the
  * setup screen rather than the remote; its bindings are kept in `super_remote` storage apart from the
  * saved devices, so routing here changes neither the picker's selection nor what the remote binds.
+ * [onAddDevice] opens Add a device, which returns to the setup screen that opened it.
  */
 @Composable
 private fun SuperRemoteRoute(
@@ -136,6 +193,7 @@ private fun SuperRemoteRoute(
     devices: List<SavedDevice>,
     setup: Boolean,
     onScreen: (Screen) -> Unit,
+    onAddDevice: () -> Unit,
 ) {
     val context = LocalContext.current.applicationContext
     val store = remember { SuperRemoteStore(context) }
@@ -146,7 +204,7 @@ private fun SuperRemoteRoute(
             devices = devices,
             bindings = bindings,
             setup = remember(store) { SuperRemoteSetup({ store.bindings.value }, store::write) },
-            onAddDevice = { onScreen(Screen.AddDevice) },
+            onAddDevice = onAddDevice,
             onBack = { onScreen(Screen.Remote) },
         )
     } else {
@@ -155,14 +213,14 @@ private fun SuperRemoteRoute(
             devices = devices,
             bindings = bindings,
             onSetup = { onScreen(Screen.SuperRemoteSetup) },
-            onDeviceSettings = { onScreen(Screen.DeviceSettings) },
+            onDevices = { onScreen(Screen.Devices) },
             onGeneralSettings = { onScreen(Screen.GeneralSettings) },
         )
     }
 }
 
 @Composable
-private fun EmptyRemoteScreen(
+internal fun EmptyRemoteScreen(
     contentPadding: PaddingValues,
     onFindDevices: () -> Unit,
     onGeneralSettings: () -> Unit,
@@ -174,9 +232,12 @@ private fun EmptyRemoteScreen(
     ) {
         EngravedLabel("KAUKOSÄÄDIN")
         Text("No devices added", style = MaterialTheme.typography.headlineSmall)
-        Text("Scan your Wi-Fi for TVs, Apple TVs and Hue Bridges to start using the remote.", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "Find the TVs, Apple TVs and Hue Bridges on your Wi-Fi to start using the remote.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
         Button(onClick = onFindDevices) { Text("Find devices") }
-        Text("Supports Apple TV, LG webOS TVs and Hue Bridges", style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = onGeneralSettings) { Text("General settings") }
     }
 }

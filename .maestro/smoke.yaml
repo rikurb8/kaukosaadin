@@ -1,5 +1,5 @@
 # Covers both a fresh install and existing saved devices without erasing pairing.
-# No pairing, wake or navigation; Add device only scans.
+# No pairing, wake or navigation; Add a device only scans.
 appId: fi.goodconsulting.kaukosaadin
 tags:
   - smoke
@@ -37,13 +37,19 @@ tags:
       visible: "Device settings"
     commands:
       - assertVisible: "(WEBOS|TVOS)"
-      - tapOn: ".* · (LG TV|Apple TV) ▾"
-      - tapOn: "Add device…"
-- assertVisible: "Add device"
-- assertVisible: "Enter LG TV address"
-- tapOn:
-    text: "Done"
-    index: 0
+      - tapOn: ".*▾"
+      - tapOn: "Add a device"
+- assertVisible: "Add a device"
+- scrollUntilVisible:
+    element:
+      text: "Can't find your device\\?"
+    direction: DOWN
+- assertVisible: "Can't find your device\\?"
+- scrollUntilVisible:
+    element:
+      text: "Close"
+    direction: UP
+- tapOn: "Close"
 - runFlow:
     when:
       visible: "No devices added"

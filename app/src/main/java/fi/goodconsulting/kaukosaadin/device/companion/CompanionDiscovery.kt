@@ -26,7 +26,10 @@ class CompanionDiscovery(
     private val lock = Mutex()
 
     @Suppress("DEPRECATION") // Serialized resolveService supports the app's API 29 floor.
-    suspend fun scan(timeoutMs: Long = DEFAULT_TIMEOUT_MS): List<Device> =
+    suspend fun scan(
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        onFound: (List<Device>) -> Unit = {},
+    ): List<Device> =
         withContext(Dispatchers.IO) {
             require(timeoutMs in MIN_TIMEOUT_MS..MAX_TIMEOUT_MS) {
                 "Discovery timeout must be $MIN_TIMEOUT_MS–$MAX_TIMEOUT_MS ms."
@@ -56,6 +59,7 @@ class CompanionDiscovery(
                                 known.remove(event.name)
                                 pending.remove(event.name)
                                 devices.remove(event.name)
+                                onFound(devices.values.toList())
                             }
                             is Event.Resolved -> {
                                 resolving = null
@@ -64,6 +68,7 @@ class CompanionDiscovery(
                                     event.info?.let { info ->
                                         endpoint(event.request.serviceName, info.host, info.port)?.let {
                                             devices[event.request.serviceName] = it
+                                            onFound(devices.values.toList())
                                         }
                                     }
                                 }

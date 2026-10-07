@@ -1,4 +1,4 @@
-# Unified LG + Apple TV scan check; excluded from suite discovery. Never taps a found device,
+# Unified LG + Apple TV + Hue scan check; excluded from suite discovery. Never taps a found device,
 # so nothing is inspected, paired or sent.
 appId: fi.goodconsulting.kaukosaadin
 ---
@@ -13,17 +13,17 @@ appId: fi.goodconsulting.kaukosaadin
     when:
       visible: "Device settings"
     commands:
-      - tapOn: ".* · (LG TV|Apple TV) ▾"
-      - tapOn: "Add device…"
-- assertVisible: "Add device"
+      - tapOn: ".*▾"
+      - tapOn: "Add a device"
+- assertVisible: "Add a device"
 - extendedWaitUntil:
     visible: "Scan again"
     timeout: 20000
-- assertVisible: "Apple TV"
-- assertVisible: "LG TV"
-- assertVisible: "(.* · [0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+.*|No Apple TVs found.*|No LG TVs replied.*|.*scan failed.*)"
+- assertVisible: "(Found [0-9]+ new devices?|No (new )?devices found|Couldn't scan your network.*)"
 - scrollUntilVisible:
     element:
-      text: "Enter LG TV address"
+      text: "Can't find your device\\?"
     direction: DOWN
-- assertVisible: "Enter LG TV address"
+- tapOn: "Can't find your device\\?"
+- assertVisible: "Add by address"
+- assertVisible: "IP address"

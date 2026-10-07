@@ -173,7 +173,7 @@ Companion services can belong to Macs and other devices, not just Apple TVs.
 
 The debug-only `CompanionDiscoveryActivity` exposes Scan/Cancel and host/port results.
 There is no automatic scan, TCP connection, credential access, pairing or TV command.
-The main app's **Add device** screen runs the same scan next to the LG scan.
+The main app's **Add a device** screen runs the same scan next to the LG scan.
 
 ```bash
 ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:assembleRelease
@@ -222,7 +222,7 @@ double tap = two down/up pairs on the same connection, hold = down, 1 s, up (rel
 always attempted). The debug screen maps tap/double-tap/long-press on Menu and Home to
 these; operator-confirmed on the real Apple TV from the S25 (see below).
 
-The main app's **Add device** screen (`ui/AddDeviceScreen.kt`) scans and pairs with the TV's PIN;
+The main app's **Add a device** screen (`ui/AddDeviceScreen.kt`) scans and pairs with the TV's PIN;
 **Device settings** removes it. The main remote, driving an Apple TV, exposes a power key (Sleep; confirmed
 on the real Apple TV 2026-10-05), BACK (Menu), HOME (TV), Play/Pause, Volume -/+,
 arrows and OK (Select), with double tap/hold on BACK and HOME. Play/Pause has no

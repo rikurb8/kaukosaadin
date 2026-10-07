@@ -2,13 +2,11 @@ package fi.goodconsulting.kaukosaadin.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,50 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import kotlinx.coroutines.delay
-
-/** Shown while the Apple TV displays its pairing PIN; cancelling ends that pairing attempt. */
-@Composable
-fun AppleTvPinDialog(client: CompanionClient) {
-    val awaitingPin by client.awaitingPin.collectAsState()
-    var pin by remember { mutableStateOf("") }
-    var pinError by remember { mutableStateOf("") }
-    LaunchedEffect(awaitingPin) {
-        pin = ""
-        pinError = ""
-    }
-    DisposableEffect(client) { onDispose { client.cancelPairing() } }
-    if (awaitingPin) {
-        AlertDialog(
-            onDismissRequest = { client.cancelPairing() },
-            title = { Text("Enter the Apple TV PIN") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Enter the four digits shown on the Apple TV. Expires after 90 seconds.")
-                    OutlinedTextField(
-                        pin,
-                        { pin = it.filter(Char::isDigit).take(4) },
-                        label = { Text("Apple TV PIN") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    )
-                    if (pinError.isNotEmpty()) Text(pinError)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val submitted = client.submitPin(pin)
-                    pinError = if (submitted.ok) "" else submitted.message
-                    if (submitted.ok) pin = ""
-                }) { Text("Submit PIN") }
-            },
-            dismissButton = { TextButton(onClick = { client.cancelPairing() }) { Text("Cancel pairing") } },
-        )
-    }
-}
 
 /**
  * Appears while the Apple TV's on-screen keyboard is focused (Companion RTI push) and mirrors

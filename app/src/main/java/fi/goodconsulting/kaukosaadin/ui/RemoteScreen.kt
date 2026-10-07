@@ -61,6 +61,7 @@ internal val FramedMaxWidth = 420.dp
  * a saved pairing (Apple TV). [onConnect] is null for devices that verify per press,
  * and [onApps] is null for devices with no launchable-app list.
  */
+@Suppress("LongMethod") // Hands the same callbacks to either the Debug or the Standard layout.
 @Composable
 internal fun RemoteScreen(
     contentPadding: PaddingValues,
@@ -73,6 +74,7 @@ internal fun RemoteScreen(
     status: String,
     onSelect: (SavedDevice) -> Unit,
     onAddDevice: () -> Unit,
+    onDevices: () -> Unit,
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
@@ -113,6 +115,7 @@ internal fun RemoteScreen(
             navigationEnabled = navigationEnabled,
             onSelect = onSelect,
             onAddDevice = onAddDevice,
+            onDevices = onDevices,
             onConnect = onConnect,
             onApps = onApps,
             onSettings = onSettings,
@@ -143,6 +146,7 @@ internal fun RemoteScreen(
             txFlash = { txFlash.value },
             onSelect = onSelect,
             onAddDevice = onAddDevice,
+            onDevices = onDevices,
             onConnect = onConnect,
             onApps = onApps,
             onSettings = onSettings,
@@ -270,13 +274,14 @@ private fun StatusControls(
     txFlash: () -> Float,
     onSelect: (SavedDevice) -> Unit,
     onAddDevice: () -> Unit,
+    onDevices: () -> Unit,
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
     onShowStatus: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice)
+        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice, onManageDevices = onDevices)
         VfdDisplay(
             kind = current.kind,
             deviceName = current.name,

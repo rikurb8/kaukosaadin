@@ -122,17 +122,17 @@ presses the bridge's link button. Manual entry accepts a numeric LAN IPv4 only.
   the name (`… · BSB002`) matches the bridge. The app reads only `modelid`, as optional display
   metadata; it does not store or use the advertised port or `bridgeid`.
 - **DISC-2 — manual address.** With discovery producing nothing (e.g. scan on a network where
-  mDNS is filtered), enter the bridge's IPv4 in **Enter Hue Bridge address** and tap **Add**.
-  Confirm a URL or hostname is refused with "Enter the bridge's numeric IPv4 address, not a
-  URL.", and that a valid address starts pairing.
-- **PAIR-1 — link-button pairing (item 4).** Select the bridge, press the bridge's link button,
-  tap **Pair again**. Record the result and the **link-button window duration**: time from
-  pressing the button to a successful pair, and the longest delay that still succeeds (assumed
-  ~30 s; no timer is assumed in the code). Confirm the device is saved and shows under the
+  mDNS is filtered), open **Can't find your device?**, choose **Hue Bridge**, enter the bridge's
+  IPv4 and tap **Continue**. Confirm a URL or hostname is refused with "Enter a local address made
+  of numbers, like 192.168.1.20.", and that a valid address starts pairing.
+- **PAIR-1 — link-button pairing (item 4).** Select the bridge, then press the bridge's link
+  button while the sheet counts down; pairing retries every 2 s for 30 s (`awaitLinkButton`) and
+  finishes without a tap. Record the result and the **link-button window duration**: time from
+  pressing the button to a successful pair. Confirm the device is saved and shows under the
   picker.
-- **PAIR-2 — no button pressed.** Before the button is pressed, pairing shows the link-button
-  message (bridge error type 101) and nothing retries on its own. Confirm the candidate stays
-  on screen so **Pair again** can be tapped.
+- **PAIR-2 — no button pressed.** Leave the button alone: each attempt gets bridge error type 101,
+  and after 30 s the sheet says **Didn't catch that** and offers **Try again**. Confirm nothing is
+  saved and Try again starts a fresh wait.
 - **PAIR-3 — app-key format (item 8).** After pairing, confirm the app appears in the Hue app's
   paired-app list, and record the *shape* of the key the bridge minted (expected: a 36-char
   hyphenated UUID). **Never record or commit the key itself.** Note whether a `clientkey` was

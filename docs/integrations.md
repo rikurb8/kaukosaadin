@@ -7,18 +7,26 @@ through one explicitly registered object; the shell never branches on a kind.
 
 `ui/DeviceIntegrations.kt` holds the whole boundary:
 
-- `DeviceIntegration` — one object per kind. Registers `kind`, its `Setup` section on the Add
-  device screen, and a `controls` factory for a saved device.
+- `DeviceIntegration` — one object per kind. Registers `kind`, its `scan` (one bounded LAN scan
+  returning `Candidate`s), whether it `addsByAddress` and its `candidateAt(address)`, and a
+  `controls` factory for a saved device.
+- `Candidate` — a device a scan returned or the operator typed the address of, not saved yet: its
+  `kind`, `name`, `host`, optional `detail` (a bridge's model), and its kind's `Pairing` steps.
+- `PairingHost` — what pairing reports back to Add a device: the store, `onAdded` once the device is
+  paired and saved, and `onCancel`. Pairing runs inside the composition, so dismissing the sheet
+  cancels it; each kind clears what an unfinished attempt kept in a `finally`.
 - `DeviceControls` — what the integration does for one saved device: `Remote` (the device's
-  screen: the keypad for a TV or the lighting screen for a bridge), its own dialogs and sub-screens, `Settings` (the kind's extra rows on Device settings), `forgetDetail`
+  screen: the keypad for a TV or the lighting screen for a bridge), its own dialogs and sub-screens, `Settings` (the kind's extra rows under Connection on Device settings), `forgetDetail`
   (what forgetting also clears) and `forget()` (the kind's own local cleanup).
-- `SetupHost` — the Add device screen's shared state: the store, one `scanToken` that bumps when the
-  operator taps Scan again, one `busy` flag, one progress `message`, and the `run` helper. A
-  `Setup` scans on first composition and whenever `scanToken` changes, so the one Scan button
-  searches every registered kind.
 - `RemoteActions` — the callbacks every remote shares: select a saved device, add a device, open
-  Device settings and General settings.
-- `DeviceIntegrations.all` / `of(kind)` — the register. `all` order is the Add device section order.
+  the Devices screen, Device settings and General settings.
+- `DeviceIntegrations.all` / `of(kind)` — the register. `all` order is the order kinds are listed in.
+
+Add a device (`ui/AddDeviceScreen.kt`) runs every kind's `scan` side by side and merges the outcomes
+with `mergeScan` (`ui/FoundDevices.kt`) into one list: new devices first, already-saved ones marked
+Added. Tapping one opens `PairingSheet` (`ui/PairingSheet.kt`), which hosts the candidate's
+`Pairing`; every kind lays its steps out with the shared `PairingStep`, `PinField` and
+`Disclosure`.
 
 Each kind owns its composables, dialogs, client and per-device storage:
 
@@ -37,14 +45,15 @@ clients directly (`ui/SuperRemoteScreen.kt`, `ui/SuperRemoteBindings.kt`). It is
 ## What the shell owns
 
 Navigation (`Screen` in `ui/KaukosaadinApp.kt`), theme and layout preferences, the device picker,
-the saved-device store (`device/SavedDevices.kt`), and the common device settings: rename and
-forget.
+the merged scan list, the Devices screen (`ui/DevicesScreen.kt`), the saved-device store
+(`device/SavedDevices.kt`), and the common device settings: rename and forget.
 
 ## Adding a kind
 
 1. Add its value to `DeviceKind` (`device/SavedDevices.kt`).
-2. Write `ui/<Kind>Integration.kt`: an `object <Kind>Integration : DeviceIntegration` returning a
-   `DeviceControls`, plus the kind's `Setup` section.
+2. Write `ui/<Kind>Integration.kt`: an `object <Kind>Integration : DeviceIntegration` with its
+   `scan`, a `Candidate` whose `Pairing` saves the device through `PairingHost`, and a
+   `DeviceControls`.
 3. Register it in `DeviceIntegrations.all`.
 4. Run the tests: `DeviceIntegrationsTest` fails until the kind is registered and every kind has
    exactly one integration.
@@ -55,7 +64,8 @@ main screen instead of `RemoteScreen`/`RemoteKeys`.
 
 ## Forget
 
-`DeviceStore.forget(id, clearKindState)` is the one forget path: it clears everything the kind
+`DeviceStore.forget(id, clearKindState)` is the one forget path, used by both Device settings and the
+Devices screen: it clears everything the kind
 keeps for the device through the controls, then drops the saved device and its selection. A kind that
 must clear credentials (a Hue bridge's app key, say) implements that in its `DeviceControls.forget()`;
 it is then cleared from the same place as every other kind, so a kind never adds its own forget code

@@ -10,7 +10,7 @@ import fi.goodconsulting.kaukosaadin.device.SavedDevice
 /**
  * Every device kind's integration, explicitly registered. Adding a kind is a new file implementing
  * [DeviceIntegration] plus one entry here — no edit to an existing kind's controls. [all] order is
- * the Add device section order.
+ * the order kinds are listed in on Add a device.
  */
 internal object DeviceIntegrations {
     val all: List<DeviceIntegration> = listOf(AppleTvIntegration, LgIntegration, HueIntegration)
@@ -20,20 +20,30 @@ internal object DeviceIntegrations {
 }
 
 /**
- * One device kind's own setup, main screen and settings extras. The shell owns navigation,
- * theme/layout preferences and the common rename/forget settings, and routes to the selected
- * device's integration by [kind], so a kind owns its client and controls end to end.
+ * One device kind's own discovery, pairing, main screen and settings extras. The shell owns
+ * navigation, the one merged scan list, theme/layout preferences and the common rename/forget
+ * settings, and routes to a device's integration by [kind], so a kind owns its client and controls
+ * end to end.
  */
 internal interface DeviceIntegration {
     val kind: DeviceKind
 
     /**
-     * The kind's part of the Add device screen: its scan, results and pairing. It scans on first
-     * composition and whenever [SetupHost.scanToken] changes, so the screen's one Scan button
-     * searches every registered kind.
+     * One bounded scan for this kind's devices on the LAN; throws when the scan itself fails. Add a
+     * device runs every registered kind's scan side by side and lists the results together.
+     * [onFound] is called with everything found so far each time a device answers, so the list fills
+     * in without waiting for the scan window to close; the returned list is the finished result.
      */
-    @Composable
-    fun Setup(host: SetupHost)
+    suspend fun scan(
+        context: Context,
+        onFound: (List<Candidate>) -> Unit,
+    ): List<Candidate>
+
+    /** Whether the operator can add this kind by typing its address when the scan misses it. */
+    val addsByAddress: Boolean get() = false
+
+    /** A candidate at a typed [address]; null when it is not a usable address for this kind. */
+    fun candidateAt(address: String): Candidate? = null
 
     /** The live controls for [device]; the shell keeps them while that device stays selected. */
     fun controls(
@@ -41,6 +51,33 @@ internal interface DeviceIntegration {
         device: SavedDevice,
     ): DeviceControls
 }
+
+/**
+ * A device a scan returned, or the operator typed the address of, that is not saved yet. Picking it
+ * shows its kind's [Pairing] steps in a sheet over Add a device.
+ */
+internal interface Candidate {
+    val kind: DeviceKind
+    val name: String
+    val host: String
+
+    /** Extra advertised detail worth showing, such as a bridge's model; null when there is none. */
+    val detail: String?
+
+    /**
+     * The kind's pairing steps, from connecting to saving. Ends with [PairingHost.onAdded] once the
+     * device is paired and saved; leaving composition cancels pairing and clears what it kept.
+     */
+    @Composable
+    fun Pairing(host: PairingHost)
+}
+
+/** What a [Candidate]'s pairing steps report to the Add a device screen. */
+internal class PairingHost(
+    val store: DeviceStore,
+    val onAdded: () -> Unit,
+    val onCancel: () -> Unit,
+)
 
 /**
  * Everything an integration does for one saved device. The shell shows [Remote] as the remote,
@@ -57,7 +94,7 @@ internal interface DeviceControls {
         remote: RemoteActions,
     )
 
-    /** The kind's extra rows on Device settings, below the common name and forget controls. */
+    /** The kind's extra rows on Device settings, below the common name and above forget. */
     @Composable
     fun Settings(
         device: SavedDevice,
@@ -79,18 +116,7 @@ internal class RemoteActions(
     val layout: AppLayout,
     val onSelect: (SavedDevice) -> Unit,
     val onAddDevice: () -> Unit,
+    val onDevices: () -> Unit,
     val onSettings: () -> Unit,
     val onGeneralSettings: () -> Unit,
-)
-
-/** The Add device screen's shared state, handed to every integration's [DeviceIntegration.Setup]. */
-internal class SetupHost(
-    val store: DeviceStore,
-    val scanToken: Int,
-    val busy: Boolean,
-    val message: String,
-    val onMessage: (String) -> Unit,
-    val run: (suspend () -> Unit) -> Unit,
-    val onScanning: (Boolean) -> Unit,
-    val onAdded: () -> Unit,
 )

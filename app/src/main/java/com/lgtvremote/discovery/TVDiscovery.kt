@@ -16,8 +16,14 @@ class TVDiscovery {
         val location: String? = null,
     )
 
-    /** Upstream SSDP multicast/broadcast scan; no HTTP enrichment or pairing. */
-    fun scanNetwork(timeoutMs: Int = DEFAULT_TIMEOUT_MS): List<DiscoveredTV> {
+    /**
+     * Upstream SSDP multicast/broadcast scan; no HTTP enrichment or pairing. [onFound] is called with
+     * every TV found so far as each reply lands, so a caller can list them before the window closes.
+     */
+    fun scanNetwork(
+        timeoutMs: Int = DEFAULT_TIMEOUT_MS,
+        onFound: (List<DiscoveredTV>) -> Unit = {},
+    ): List<DiscoveredTV> {
         require(timeoutMs in MIN_TIMEOUT_MS..MAX_TIMEOUT_MS) {
             "Discovery timeout must be $MIN_TIMEOUT_MS–$MAX_TIMEOUT_MS ms."
         }
@@ -60,7 +66,7 @@ class TVDiscovery {
                     try {
                         val packet = DatagramPacket(ByteArray(MAX_RESPONSE_BYTES), MAX_RESPONSE_BYTES)
                         socket.receive(packet)
-                        absorb(packet, devices)
+                        if (absorb(packet, devices) != null) onFound(devices.values.toList())
                     } catch (_: SocketTimeoutException) {
                         break
                     }
@@ -80,15 +86,15 @@ class TVDiscovery {
         private const val MAX_NAME_CHARS = 160
         private const val SEARCH_TARGET = "urn:lge-com:service:webos-second-screen:1"
 
-        /** Records the first reply per address; replies we cannot attribute or have already seen are dropped. */
+        /** Records the first reply per address and returns it, so a caller can report it; repeats are dropped. */
         private fun absorb(
             packet: DatagramPacket,
             devices: MutableMap<String, DiscoveredTV>,
-        ) {
-            val ip = packet.address.hostAddress ?: return
-            if (ip in devices) return
-            val response = String(packet.data, 0, packet.length, Charsets.UTF_8)
-            parseResponse(response, ip)?.let { devices[ip] = it }
+        ): DiscoveredTV? {
+            val ip = packet.address.hostAddress?.takeIf { it !in devices }
+            val tv = ip?.let { parseResponse(String(packet.data, 0, packet.length, Charsets.UTF_8), it) }
+            if (tv != null) devices[tv.ip] = tv
+            return tv
         }
 
         /** Extracted upstream response parser, tightened at the untrusted LAN boundary. */

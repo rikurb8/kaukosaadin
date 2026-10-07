@@ -36,7 +36,7 @@ object LgProtocol {
         pin: String,
     ): String {
         ipv4(address)
-        require(pin.matches(Regex("[0-9a-fA-F]{64}"))) { "Trust the TV certificate first: Device settings › Re-pair." }
+        require(pin.matches(Regex("[0-9a-fA-F]{64}"))) { "Trust the TV certificate first: Device settings › Pair again." }
         return pin.lowercase()
     }
 
@@ -104,7 +104,7 @@ object LgProtocol {
     ): Boolean {
         val method = reply.optJSONObject("payload")?.optString("pairingType")?.takeIf { it.isNotEmpty() }
         if (reply.optString("type") == "registered" || method == null) return false
-        check(!navigation) { "TV needs pairing. Command discarded; use Device settings › Re-pair, then press again." }
+        check(!navigation) { "TV needs pairing. Command discarded; use Device settings › Pair again, then press again." }
         check(method.equals("PIN", ignoreCase = true)) {
             "TV did not offer PIN pairing. Check TV firmware/network-remote settings; no PROMPT fallback was used."
         }
