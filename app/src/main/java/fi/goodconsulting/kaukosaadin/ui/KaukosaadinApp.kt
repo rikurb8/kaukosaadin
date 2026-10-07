@@ -30,14 +30,16 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import fi.goodconsulting.kaukosaadin.device.DeviceStore
+import fi.goodconsulting.kaukosaadin.device.SavedDevice
 
 /** Where the app is; every screen but the remote returns to it. */
-private enum class Screen { Remote, AddDevice, DeviceSettings, GeneralSettings }
+private enum class Screen { Remote, AddDevice, DeviceSettings, GeneralSettings, SuperRemoteSetup }
 
 /**
  * The app shell: the saved devices, the screen router, theme/layout preferences and the empty
  * screen. The selected device's [DeviceIntegration] owns its kind's setup, remote and settings;
- * [DeviceIntegrations] is the register of kinds.
+ * [DeviceIntegrations] is the register of kinds. The Super remote layout drives [SuperRemoteStore]'s
+ * own bindings instead of the selected device.
  */
 @Composable
 fun KaukosaadinApp() {
@@ -81,6 +83,8 @@ fun KaukosaadinApp() {
                     )
                 screen == Screen.DeviceSettings ->
                     DeviceSettingsScreen(innerPadding, current, store, controls, onBack = toRemote)
+                layout == AppLayout.SuperRemote ->
+                    SuperRemoteRoute(innerPadding, devices, setup = screen == Screen.SuperRemoteSetup) { screen = it }
                 else -> {
                     val remote =
                         RemoteActions(
@@ -117,6 +121,43 @@ private fun SystemBars(colors: ColorScheme) {
         val light = colors.background.luminance() > 0.5f
         bars.isAppearanceLightStatusBars = light
         bars.isAppearanceLightNavigationBars = light
+    }
+}
+
+/**
+ * The Super remote layout: one [SuperRemoteStore] shared by its two screens, so setup writes the same
+ * bindings the Super remote reads and a choice shows up there without a restart. [setup] picks the
+ * setup screen rather than the remote; its bindings are kept in `super_remote` storage apart from the
+ * saved devices, so routing here changes neither the picker's selection nor what the remote binds.
+ */
+@Composable
+private fun SuperRemoteRoute(
+    padding: PaddingValues,
+    devices: List<SavedDevice>,
+    setup: Boolean,
+    onScreen: (Screen) -> Unit,
+) {
+    val context = LocalContext.current.applicationContext
+    val store = remember { SuperRemoteStore(context) }
+    val bindings by store.bindings.collectAsState()
+    if (setup) {
+        SuperRemoteSetupScreen(
+            padding = padding,
+            devices = devices,
+            bindings = bindings,
+            setup = remember(store) { SuperRemoteSetup({ store.bindings.value }, store::write) },
+            onAddDevice = { onScreen(Screen.AddDevice) },
+            onBack = { onScreen(Screen.Remote) },
+        )
+    } else {
+        SuperRemoteScreen(
+            padding = padding,
+            devices = devices,
+            bindings = bindings,
+            onSetup = { onScreen(Screen.SuperRemoteSetup) },
+            onDeviceSettings = { onScreen(Screen.DeviceSettings) },
+            onGeneralSettings = { onScreen(Screen.GeneralSettings) },
+        )
     }
 }
 

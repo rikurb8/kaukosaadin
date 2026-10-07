@@ -28,6 +28,12 @@ Each kind owns its composables, dialogs, client and per-device storage:
 | Apple TV | `ui/AppleTvIntegration.kt` | `device/companion/` |
 | Hue Bridge | `ui/HueIntegration.kt` | `device/hue/` |
 
+One screen is deliberately outside the seam: the **Super remote** is a cross-kind layout, not a
+kind. It puts one saved Apple TV's shortcuts and controls and one saved bridge's room-or-zone
+lighting on one screen, so it resolves its own bindings to those saved devices and builds their
+clients directly (`ui/SuperRemoteScreen.kt`, `ui/SuperRemoteBindings.kt`). It is not in
+`DeviceIntegrations.all` and registers nothing.
+
 ## What the shell owns
 
 Navigation (`Screen` in `ui/KaukosaadinApp.kt`), theme and layout preferences, the device picker,

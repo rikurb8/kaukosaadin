@@ -59,6 +59,17 @@ _Avoid_: registration, ready, pair, reconnect
 The verified encrypted link the remote opens on showing the remote screen and holds while it stays visible.
 _Avoid_: connection, socket
 
+## Super remote
+
+**Preset**:
+One of the Super remote's fixed lighting outcomes for the bound room or zone: Bright (on at 100%),
+Dim (on at 20%) and Off (off).
+_Avoid_: scene, mode, setting
+
+**Shortcut**:
+One of the two remembered Apple TV apps the Super remote launches in one tap.
+_Avoid_: favorite, bookmark, quick launch
+
 ## Pairing and trust
 
 **Pairing**:
@@ -154,7 +165,8 @@ The app-wide palette: Classic or Hacker man.
 _Avoid_: skin, colours
 
 **Layout**:
-The app-wide remote presentation: Standard (full casing, wheel and VFD) or Debug (flat panels with a live status log).
+The app-wide remote presentation: Standard (full casing, wheel and VFD), Debug (flat panels with a live status
+log) or Super remote (app shortcuts, Apple TV controls and lighting on one screen).
 _Avoid_: view mode, style
 
 **General settings**:

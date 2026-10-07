@@ -1,7 +1,6 @@
 package fi.goodconsulting.kaukosaadin.ui
 
 import android.content.Context
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -11,21 +10,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionDiscovery
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -55,33 +48,15 @@ private class AppleTvControls(
         padding: PaddingValues,
         remote: RemoteActions,
     ) {
-        val activity = LocalActivity.current
-        var connecting by remember { mutableStateOf(false) }
-        // Opening the remote connects once and holds the session while it is visible, apps list
-        // included; leaving or backgrounding closes it. A new session restarts the effect.
-        LaunchedEffect(activity, client) {
-            if (activity is LifecycleOwner) {
-                activity.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                    try {
-                        connecting = true
-                        try {
-                            client.connect()
-                        } finally {
-                            connecting = false
-                        }
-                        awaitCancellation()
-                    } finally {
-                        withContext(NonCancellable) { client.disconnect() }
-                    }
-                }
+        // The session seam owns the RESUMED-scoped connect/disconnect, the keyboard dialog and the
+        // single-in-flight dispatch; this screen only renders it. A new session restarts the effect.
+        AppleTvSessionHost(client) { session ->
+            var showApps by rememberSaveable(remote.current.id) { mutableStateOf(false) }
+            if (showApps) {
+                AppleTvAppsScreen(padding, client, onBack = { showApps = false })
+            } else {
+                AppleTvRemote(padding, remote, client, session, onApps = { showApps = true })
             }
-        }
-        AppleTvKeyboardDialog(client)
-        var showApps by rememberSaveable(remote.current.id) { mutableStateOf(false) }
-        if (showApps) {
-            AppleTvAppsScreen(padding, client, onBack = { showApps = false })
-        } else {
-            AppleTvRemote(padding, remote, client, connecting, onApps = { showApps = true })
         }
     }
 
@@ -155,31 +130,19 @@ private fun AppleTvSetup(host: SetupHost) {
     if (scan.isNotEmpty()) Text(scan, style = MaterialTheme.typography.bodySmall)
 }
 
-/** The Apple TV session is opened by [AppleTvControls] while this is visible; presses reuse it. */
+/** The Apple TV session is opened by [AppleTvSessionHost] while this is visible; presses reuse it. */
 @Composable
 private fun AppleTvRemote(
     padding: PaddingValues,
     remote: RemoteActions,
     client: CompanionClient,
-    connecting: Boolean,
+    session: AppleTvSession,
     onApps: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val status by client.status.collectAsState()
-    val paired by client.paired.collectAsState()
-    var busy by remember { mutableStateOf(false) }
-
-    fun run(block: suspend () -> Unit) {
-        if (busy) return
-        busy = true
-        scope.launch {
-            try {
-                block()
-            } finally {
-                busy = false
-            }
-        }
-    }
+    val status by session.status.collectAsState()
+    val paired by session.paired.collectAsState()
+    val busy by session.busy.collectAsState()
+    val connecting by session.connecting.collectAsState()
     RemoteScreen(
         contentPadding = padding,
         devices = remote.devices,
@@ -195,8 +158,8 @@ private fun AppleTvRemote(
         onApps = onApps,
         onSettings = remote.onSettings,
         onGeneralSettings = remote.onGeneralSettings,
-        onPower = { run { client.sleep() } },
-        onKey = { key, action -> run { client.press(key.hid, action) } },
+        onPower = { session.run { client.sleep() } },
+        onKey = { key, action -> session.run { client.press(key.hid, action) } },
     )
 }
 

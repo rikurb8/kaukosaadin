@@ -157,6 +157,50 @@ class HueApiTest {
             assertEquals(listOf(true, false), executor.requests.map { JSONObject(it.bodyText()).getJSONObject("on").getBoolean("on") })
         }
 
+    @Test fun theThreeLightingPresetsSendTheirExactBodiesAndUrlsOneRequestEach() =
+        runBlocking {
+            val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
+            val api = HueApi(HOST, KEY, executor)
+            val room = HueCommandTarget.Group("grouped-2")
+
+            assertEquals(HueResult.Ok(Unit), api.setOnWithBrightness(room, 100)) // Bright: on at 100%
+            assertEquals(HueResult.Ok(Unit), api.setOnWithBrightness(room, 20)) // Dim: on at 20%
+            assertEquals(HueResult.Ok(Unit), api.setOn(room, on = false)) // Off: on alone
+
+            // One press is exactly one execute(): three presses, three requests, all PUT to the grouped light.
+            assertEquals(3, executor.requests.size)
+            assertEquals(listOf("PUT", "PUT", "PUT"), executor.requests.map { it.method })
+            assertEquals(
+                List(3) { "https://$HOST/clip/v2/resource/grouped_light/grouped-2" },
+                executor.requests.map { it.url.toString() },
+            )
+            // Exact bodies; re-serialised because the JVM org.json reorders keys, so key order is not asserted.
+            assertEquals(
+                listOf(PRESET_BODY_100, PRESET_BODY_20, PRESET_BODY_OFF),
+                executor.requests.map { JSONObject(it.bodyText()).toString() },
+            )
+        }
+
+    @Test fun anOutOfRangePresetBrightnessFailsWithoutTouchingTheBridge() =
+        runBlocking {
+            val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
+            val api = HueApi(HOST, KEY, executor)
+            val room = HueCommandTarget.Group("grouped-2")
+
+            assertEquals(HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE), api.setOnWithBrightness(room, 101))
+            assertEquals(HueResult.Failure(HueErrors.BRIGHTNESS_OUT_OF_RANGE), api.setOnWithBrightness(room, -1))
+            assertTrue(executor.requests.isEmpty())
+        }
+
+    @Test fun aFailedPresetCommandIsSentOnceAndNeverReplayed() =
+        runBlocking {
+            val executor = FakeExecutor { HueHttpResponse(503, """{"errors":[{"description":"down","type":901}]}""") }
+            val result = HueApi(HOST, KEY, executor).setOnWithBrightness(HueCommandTarget.Group("grouped-2"), 20)
+
+            assertTrue(result is HueResult.Failure)
+            assertEquals(1, executor.requests.size)
+        }
+
     private fun Request.bodyText(): String {
         val buffer = Buffer()
         body?.writeTo(buffer)
@@ -178,5 +222,10 @@ class HueApiTest {
         const val HOST = "192.168.1.42"
         const val KEY = "a4e08834-0893-4013-b646-738582ec15c9"
         const val EMPTY_ENVELOPE = """{"errors":[],"data":[]}"""
+
+        /** The exact bodies the three presets must send, re-serialised by the JVM JSONObject so key order cannot fail them. */
+        val PRESET_BODY_100 = JSONObject("""{"on":{"on":true},"dimming":{"brightness":100}}""").toString()
+        val PRESET_BODY_20 = JSONObject("""{"on":{"on":true},"dimming":{"brightness":20}}""").toString()
+        val PRESET_BODY_OFF = JSONObject("""{"on":{"on":false}}""").toString()
     }
 }
