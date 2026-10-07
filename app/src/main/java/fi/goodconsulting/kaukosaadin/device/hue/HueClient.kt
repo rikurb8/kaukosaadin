@@ -25,6 +25,8 @@ internal class HueClient(
     data class Result(
         val ok: Boolean,
         val message: String,
+        /** The bridge answered error 101: its link button has not been pressed yet. */
+        val waitingForLinkButton: Boolean = false,
     )
 
     /**
@@ -65,8 +67,9 @@ internal class HueClient(
     ): OkHttpClient = tls.configure(host).apply(tune).build()
 
     /**
-     * One link-button pairing attempt against [address]. Error 101 leaves the operator to press the
-     * button and call this again; there is no automatic retry loop.
+     * One link-button pairing attempt against [address]. Error 101 comes back as
+     * [Result.waitingForLinkButton]; [awaitLinkButton] repeats the attempt while the operator walks
+     * to the bridge.
      */
     suspend fun pair(address: String): Result =
         operation {
@@ -88,7 +91,7 @@ internal class HueClient(
                     Result(true, "Bridge paired; the app key is stored on this phone.")
                 }
                 HuePairingResult.LinkButtonNotPressed ->
-                    Result(false, "Waiting for the link button: press it on the bridge, then tap Pair again.")
+                    Result(false, "Waiting for the link button on the bridge.", waitingForLinkButton = true)
                 is HuePairingResult.Rejected -> Result(false, result.message)
             }
         }

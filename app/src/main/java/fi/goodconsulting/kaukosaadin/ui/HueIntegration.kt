@@ -1,28 +1,24 @@
 package fi.goodconsulting.kaukosaadin.ui
 
 import android.content.Context
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.hue.HueClient
@@ -30,15 +26,26 @@ import fi.goodconsulting.kaukosaadin.device.hue.HueDiscovery
 import fi.goodconsulting.kaukosaadin.device.hue.HueFavorites
 import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
 import fi.goodconsulting.kaukosaadin.device.hue.HueProtocol
-import kotlinx.coroutines.CancellationException
+import fi.goodconsulting.kaukosaadin.device.hue.LINK_BUTTON_WAIT_SECONDS
+import fi.goodconsulting.kaukosaadin.device.hue.awaitLinkButton
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /** Registers the Hue Bridge kind: mDNS discovery and link-button pairing, and the bridge's lighting screen. */
 internal object HueIntegration : DeviceIntegration {
     override val kind = DeviceKind.Hue
 
-    @Composable
-    override fun Setup(host: SetupHost) = HueSetup(host)
+    override suspend fun scan(context: Context): List<Candidate> =
+        HueDiscovery(context).scan().map { bridge ->
+            HueCandidate(host = bridge.address.hostAddress.orEmpty(), name = bridge.name, detail = bridge.model)
+        }
+
+    override val addsByAddress = true
+
+    override fun candidateAt(address: String): Candidate? =
+        runCatching { HueProtocol.ipv4(address) }.getOrNull()?.let { HueCandidate(it, DeviceKind.Hue.label, null) }
 
     override fun controls(
         context: Context,
@@ -71,125 +78,118 @@ private class HueControls(
         run: (suspend () -> Unit) -> Unit,
     ) {
         val status by client.status.collectAsState()
-        Text("Pairing", style = MaterialTheme.typography.titleMedium)
         Text(status.message)
-        Text("Bridge address: ${client.host ?: device.host}")
         Text(
-            if (client.pin != null) {
-                "Certificate: pinned to the paired bridge"
-            } else {
-                "Certificate: verified by the system CA store, or not connected yet"
-            },
+            "To pair again, forget this bridge and add it again.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text("To pair again, forget this bridge and add it from the scan.", style = MaterialTheme.typography.bodySmall)
+        Disclosure("Details") {
+            Text("Address: ${client.host ?: device.host}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                if (client.pin != null) {
+                    "Certificate: pinned to the paired bridge"
+                } else {
+                    "Certificate: verified by the system CA store, or not connected yet"
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 
     override suspend fun forget(): String? = client.forget().takeUnless { it.ok }?.message
 }
 
-/** A bridge the operator picked and is pairing; its client owns the app key and pin under its own id. */
+/** A bridge a scan returned or the operator typed the address of. */
 private class HueCandidate(
-    val client: HueClient,
-    val id: String,
-    val host: String,
-    val name: String,
-)
+    override val host: String,
+    override val name: String,
+    override val detail: String?,
+) : Candidate {
+    override val kind = DeviceKind.Hue
 
-/** Hue's part of Add device: mDNS results and the manual address, then link-button pairing. */
-@Suppress("CyclomaticComplexMethod") // Scan, manual entry and link-button pairing share one state.
+    @Composable
+    override fun Pairing(host: PairingHost) = HuePairing(this, host)
+}
+
+/**
+ * Link-button pairing: the sheet asks for the button and keeps trying for
+ * [LINK_BUTTON_WAIT_SECONDS] seconds, so pressing it is all the operator does. Each attempt gets a
+ * fresh client id; anything it kept is cleared unless the bridge ends up saved.
+ */
 @Composable
-private fun HueSetup(host: SetupHost) {
+private fun HuePairing(
+    candidate: HueCandidate,
+    host: PairingHost,
+) {
     val context = LocalContext.current.applicationContext
-    val discovery = remember(context) { HueDiscovery(context) }
-    val saved by host.store.devices.collectAsState()
-    var found by remember { mutableStateOf(emptyList<HueDiscovery.Bridge>()) }
-    var scan by remember { mutableStateOf("") }
-    var manualAddress by remember { mutableStateOf("") }
-    var candidate by remember { mutableStateOf<HueCandidate?>(null) }
-
-    LaunchedEffect(host.scanToken) {
-        host.onScanning(true)
-        scan = "Searching for Hue Bridges…"
-        try {
-            found = discovery.scan()
-            scan = if (found.isEmpty()) "No Hue Bridges replied. Turn the bridge on, or enter its address below." else ""
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            scan = "Hue scan failed. Check Wi-Fi/LAN access, then scan again."
-        } finally {
-            host.onScanning(false)
-        }
-    }
-
-    fun isSaved(address: String) = saved.any { it.kind == DeviceKind.Hue && it.host == address }
-
-    fun pair() {
-        val pending = candidate ?: return
-        host.run {
-            val result = pending.client.pair(pending.host)
-            host.onMessage(result.message)
-            when {
-                result.ok && host.store.add(SavedDevice(pending.id, DeviceKind.Hue, pending.name, pending.host)) -> {
-                    candidate = null
-                    host.onAdded()
-                }
-                result.ok -> host.onMessage(SAVE_FAILED)
-                // Error 101 and other failures leave the candidate in place, so the operator presses
-                // the link button and taps "Pair again"; nothing retries on its own.
-                else -> Unit
-            }
-        }
-    }
-
-    fun start(
-        address: String,
-        name: String,
-    ) {
-        if (candidate != null) return
+    var attempt by remember { mutableIntStateOf(0) }
+    var timedOut by remember(attempt) { mutableStateOf(false) }
+    var failure by remember(attempt) { mutableStateOf<String?>(null) }
+    LaunchedEffect(attempt) {
         val id = UUID.randomUUID().toString()
-        candidate = HueCandidate(HueClient(context, id), id, address, name)
-        pair()
-    }
-
-    fun cancel() {
-        val pending = candidate ?: return
-        candidate = null
-        host.run { pending.client.forget() }
-    }
-
-    Text("Hue Bridge", style = MaterialTheme.typography.titleMedium)
-    found.forEach { bridge ->
-        val address = bridge.address.hostAddress.orEmpty()
-        val label = bridge.model?.let { "${bridge.name} · $it" } ?: bridge.name
-        FoundDevice(label, address, isSaved(address), enabled = !host.busy && candidate == null) { start(address, bridge.name) }
-    }
-    if (scan.isNotEmpty()) Text(scan, style = MaterialTheme.typography.bodySmall)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            manualAddress,
-            { manualAddress = it.trim() },
-            label = { Text("Enter Hue Bridge address") },
-            enabled = !host.busy && candidate == null,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(enabled = !host.busy && candidate == null && manualAddress.isNotEmpty(), onClick = {
-            val address = runCatching { HueProtocol.ipv4(manualAddress) }.getOrNull()
-            if (address == null) {
-                host.onMessage(HueProtocol.INVALID_ADDRESS)
-            } else {
-                start(address, DeviceKind.Hue.label)
+        val client = HueClient(context, id)
+        var added = false
+        try {
+            val result = awaitLinkButton { client.pair(candidate.host) }
+            added = result.ok && host.store.add(SavedDevice(id, DeviceKind.Hue, candidate.name, candidate.host))
+            when {
+                added -> Unit
+                result.ok -> failure = SAVE_FAILED
+                result.waitingForLinkButton -> timedOut = true
+                else -> failure = result.message
             }
-        }) { Text("Add") }
-    }
-    candidate?.let { pending ->
-        Text("Pairing ${pending.host}", style = MaterialTheme.typography.titleMedium)
-        Text("Press the link button on the bridge, then tap Pair again.")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !host.busy, onClick = { pair() }) { Text("Pair again") }
-            TextButton(enabled = !host.busy, onClick = { cancel() }) { Text("Cancel") }
+        } finally {
+            if (!added) withContext(NonCancellable) { client.forget() }
         }
+        if (added) host.onAdded()
+    }
+
+    val cancel = StepAction("Cancel", onClick = host.onCancel)
+    val retry = StepAction("Try again") { attempt++ }
+    when {
+        failure != null ->
+            PairingStep(DeviceKind.Hue, "Couldn't add ${candidate.name}", message = failure, primary = retry, secondary = cancel)
+        timedOut ->
+            PairingStep(
+                DeviceKind.Hue,
+                "Didn't catch that",
+                message = "The bridge didn't see its button pressed. Press the round button on top of the bridge, then try again.",
+                primary = retry,
+                secondary = cancel,
+            )
+        else -> key(attempt) { PressLinkButton(candidate.name, cancel) }
     }
 }
+
+/** Asks for the link button and counts down the wait, which [awaitLinkButton] runs meanwhile. */
+@Composable
+private fun PressLinkButton(
+    name: String,
+    cancel: StepAction,
+) {
+    val secondsLeft by produceState(LINK_BUTTON_WAIT_SECONDS) {
+        while (value > 0) {
+            delay(SECOND_MS)
+            value--
+        }
+    }
+    PairingStep(
+        DeviceKind.Hue,
+        "Press the button on your bridge",
+        message = "Press the round link button on top of $name. This finishes by itself once the bridge sees it.",
+        secondary = cancel,
+    ) {
+        LinearProgressIndicator(
+            progress = { secondsLeft / LINK_BUTTON_WAIT_SECONDS.toFloat() },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            "Waiting… ${secondsLeft}s",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private const val SECOND_MS = 1_000L

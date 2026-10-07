@@ -30,7 +30,7 @@ import fi.goodconsulting.kaukosaadin.device.hue.HueLighting
  *
  * The three sections own their own clients, readiness and failures; this screen resolves the
  * bindings against [devices], builds each section's client once for the section's own device, and
- * routes to setup, to the saved device's settings and to general settings without touching the
+ * routes to setup, to the saved devices and to general settings without touching the
  * bindings.
  */
 @Composable
@@ -39,7 +39,7 @@ internal fun SuperRemoteScreen(
     devices: List<SavedDevice>,
     bindings: SuperRemoteBindings,
     onSetup: () -> Unit,
-    onDeviceSettings: () -> Unit,
+    onDevices: () -> Unit,
     onGeneralSettings: () -> Unit,
 ) {
     val context = LocalContext.current.applicationContext
@@ -63,7 +63,7 @@ internal fun SuperRemoteScreen(
         Text("Super remote", style = MaterialTheme.typography.titleLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onSetup) { Text("Set up devices") }
-            TextButton(onClick = onDeviceSettings) { Text("Device settings") }
+            TextButton(onClick = onDevices) { Text("Devices") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onGeneralSettings) { Text("General settings") }

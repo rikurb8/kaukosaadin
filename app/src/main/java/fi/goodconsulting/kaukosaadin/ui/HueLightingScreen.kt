@@ -74,6 +74,7 @@ internal fun LightingScreen(
             enabled = true,
             onSelect = remote.onSelect,
             onAddDevice = remote.onAddDevice,
+            onManageDevices = remote.onDevices,
         )
         Text(remote.current.name, style = MaterialTheme.typography.titleLarge)
         Text(

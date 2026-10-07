@@ -3,11 +3,9 @@ package fi.goodconsulting.kaukosaadin.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,12 +17,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.LgClient
 
-/** Shared by pairing and the remote's Connect button, which re-pairs if the TV dropped its key. */
+/** Shared by Pair again and the remote's Connect button, which re-pairs if the TV dropped its key. */
 @Composable
 fun LgPinDialog(client: LgClient) {
     val awaitingPin by client.awaitingPin.collectAsState()
@@ -35,72 +31,71 @@ fun LgPinDialog(client: LgClient) {
         pinError = ""
     }
     DisposableEffect(client) { onDispose { client.cancelPairing() } }
+
+    fun submit() {
+        val submitted = client.submitPin(pin)
+        pinError = if (submitted.ok) "" else submitted.message
+        if (submitted.ok) pin = ""
+    }
     if (awaitingPin) {
         AlertDialog(
             onDismissRequest = { client.cancelPairing() },
             title = { Text("Enter the TV PIN") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Enter the code shown on the TV. No physical remote approval is requested. Expires after 90 seconds.")
-                    OutlinedTextField(
-                        pin,
-                        { pin = it },
-                        label = { Text("TV PIN") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        visualTransformation = PasswordVisualTransformation(),
-                    )
-                    if (pinError.isNotEmpty()) Text(pinError)
+                    Text("Type the PIN shown on the TV.")
+                    PinField(pin, { pin = it }, maxLength = LG_PIN_MAX_LENGTH, onDone = ::submit)
+                    if (pinError.isNotEmpty()) Text(pinError, color = MaterialTheme.colorScheme.error)
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val submitted = client.submitPin(pin)
-                    pinError = if (submitted.ok) "" else submitted.message
-                    if (submitted.ok) pin = ""
-                }) { Text("Submit PIN") }
-            },
-            dismissButton = { TextButton(onClick = { client.cancelPairing() }) { Text("Cancel pairing") } },
+            confirmButton = { TextButton(onClick = ::submit) { Text("Continue") } },
+            dismissButton = { TextButton(onClick = { client.cancelPairing() }) { Text("Cancel") } },
         )
     }
 }
 
 /**
- * The one trust decision in LG pairing: the certificate the TV presented, which later connections are
- * pinned to. First trust cannot prove identity, so the user is told what to check before trusting.
+ * Pair again's trust decision: the TV presented a certificate, which later connections are pinned to.
+ * First trust cannot prove identity, so the fingerprint and what to check stay one tap away.
  */
 @Composable
 fun LgTrustDialog(
     name: String,
-    host: String,
     fingerprint: String,
-    onName: ((String) -> Unit)?,
     onTrust: () -> Unit,
     onCancel: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Trust this TV?") },
+        title = { Text("Pair $name again?") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onName != null) {
-                    OutlinedTextField(name, onName, label = { Text("TV name") }, singleLine = true)
-                } else {
-                    Text(name, style = MaterialTheme.typography.titleMedium)
-                }
-                Text("LG TV · $host")
-                Text("Certificate SHA-256:")
-                Text(fingerprint.chunked(FINGERPRINT_GROUP).joinToString(" "), style = MaterialTheme.typography.bodySmall)
-                Text(
-                    "Only trust it on your own network. Later connections must present this exact certificate. " +
-                        "The TV then shows a PIN to finish pairing.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Text("The TV will show a PIN to finish pairing.")
+                LgSecurityDetails(fingerprint)
             }
         },
-        confirmButton = { TextButton(onClick = onTrust) { Text("Trust & pair") } },
+        confirmButton = { TextButton(onClick = onTrust) { Text("Pair") } },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
     )
 }
 
+/** The certificate the TV presented, collapsed: what gets pinned and why it matters. */
+@Composable
+internal fun LgSecurityDetails(fingerprint: String) {
+    Disclosure("Security details") {
+        Text(
+            "Only add a TV on your own network. From now on the app only talks to a TV presenting this certificate:",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            fingerprint.chunked(FINGERPRINT_GROUP).joinToString(" "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 private const val FINGERPRINT_GROUP = 8
+
+/** LG TVs show a 4–8 digit PIN; the client checks the length on submit. */
+internal const val LG_PIN_MAX_LENGTH = 8

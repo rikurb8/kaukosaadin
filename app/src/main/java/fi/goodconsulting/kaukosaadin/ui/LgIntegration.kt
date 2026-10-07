@@ -4,43 +4,47 @@ import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.lgtvremote.discovery.TVDiscovery
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.LgClient
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.scanLg
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-/** Registers the LG TV kind: SSDP scan and trust/PIN pairing, the remote, and re-pair/wake extras. */
+/** Registers the LG TV kind: SSDP scan and trust/PIN pairing, the remote, and Pair again/wake extras. */
 internal object LgIntegration : DeviceIntegration {
     override val kind = DeviceKind.Lg
 
-    @Composable
-    override fun Setup(host: SetupHost) = LgSetup(host)
+    override suspend fun scan(context: Context): List<Candidate> =
+        scanLg(context).map { tv -> LgCandidate(host = tv.ip, name = if (tv.name == tv.ip) DeviceKind.Lg.label else tv.name) }
+
+    override val addsByAddress = true
+
+    override fun candidateAt(address: String): Candidate? =
+        runCatching { LgProtocol.ipv4(address) }.getOrNull()?.let { LgCandidate(it, DeviceKind.Lg.label) }
 
     override fun controls(
         context: Context,
@@ -77,120 +81,121 @@ private class LgControls(
     override suspend fun forget(): String? = client.forget().takeUnless { it.ok }?.message
 }
 
-/** An LG TV whose certificate was inspected and now awaits the user's trust decision. */
+/** An LG TV a scan returned or the operator typed the address of. */
 private class LgCandidate(
-    val client: LgClient,
-    val id: String,
-    val host: String,
-    val fingerprint: String,
-)
+    override val host: String,
+    override val name: String,
+) : Candidate {
+    override val kind = DeviceKind.Lg
+    override val detail = null
 
-/** LG's part of Add device: SSDP results and the manual address, then trust/PIN pairing. */
-@Suppress("CyclomaticComplexMethod") // Scan, certificate inspection and pairing share one state.
+    @Composable
+    override fun Pairing(host: PairingHost) = LgPairing(this, host)
+}
+
+/** Where one LG pairing attempt is. */
+private enum class LgStep { Checking, Confirm, Connecting }
+
+/**
+ * LG pairing as one sheet: read the TV's certificate, let the operator name it and connect (the
+ * certificate stays one tap away under Security details), then the PIN the TV shows. Connect is
+ * the trust decision: the certificate read here is the one later connections are pinned to. Each
+ * attempt gets a fresh client id; anything it kept is cleared unless the TV ends up saved.
+ */
+@Suppress("CyclomaticComplexMethod", "LongMethod") // One attempt's steps share one state.
 @Composable
-private fun LgSetup(host: SetupHost) {
+private fun LgPairing(
+    candidate: LgCandidate,
+    host: PairingHost,
+) {
     val context = LocalContext.current.applicationContext
-    val saved by host.store.devices.collectAsState()
-    var found by remember { mutableStateOf(emptyList<TVDiscovery.DiscoveredTV>()) }
-    var scan by remember { mutableStateOf("") }
-    var candidate by remember { mutableStateOf<LgCandidate?>(null) }
-    var name by remember { mutableStateOf("") }
-    var manualAddress by remember { mutableStateOf("") }
+    var attempt by remember { mutableIntStateOf(0) }
+    val id = remember(attempt) { UUID.randomUUID().toString() }
+    val client = remember(id) { LgClient(context, id) }
+    val awaitingPin by client.awaitingPin.collectAsState()
+    var step by remember(attempt) { mutableStateOf(LgStep.Checking) }
+    var fingerprint by remember(attempt) { mutableStateOf("") }
+    var failure by remember(attempt) { mutableStateOf<String?>(null) }
+    var name by remember { mutableStateOf(candidate.name) }
+    var pin by remember(attempt) { mutableStateOf("") }
+    var pinError by remember(attempt) { mutableStateOf<String?>(null) }
+    var submitted by remember(attempt) { mutableStateOf(false) }
+    val confirmed = remember(attempt) { CompletableDeferred<Unit>() }
 
-    LaunchedEffect(host.scanToken) {
-        host.onScanning(true)
-        scan = "Searching for LG TVs…"
+    DisposableEffect(client) { onDispose { client.cancelPairing() } }
+    LaunchedEffect(client) {
+        var added = false
         try {
-            found = scanLg(context)
-            scan = if (found.isEmpty()) "No LG TVs replied. Turn the TV on, or enter its address below." else ""
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            scan = "LG scan failed. Check Wi-Fi/LAN access, then scan again."
+            val inspected = client.inspect(candidate.host)
+            if (inspected == null) {
+                failure = "Couldn't reach the TV. Make sure it's switched on and on the same Wi-Fi."
+                return@LaunchedEffect
+            }
+            fingerprint = inspected
+            step = LgStep.Confirm
+            confirmed.await()
+            step = LgStep.Connecting
+            val result = client.pair(candidate.host, inspected)
+            added = result.ok && host.store.add(SavedDevice(id, DeviceKind.Lg, name, candidate.host))
+            if (!added) failure = if (result.ok) SAVE_FAILED else result.message
         } finally {
-            host.onScanning(false)
+            if (!added) withContext(NonCancellable) { client.forget() }
         }
+        if (added) host.onAdded()
     }
 
-    fun isSaved(address: String) = saved.any { it.kind == DeviceKind.Lg && it.host == address }
-
-    fun inspect(
-        address: String,
-        advertised: String,
-    ) {
-        host.run {
-            val id = UUID.randomUUID().toString()
-            val client = LgClient(context, id)
-            host.onMessage("Reading the certificate of $address…")
-            val fingerprint = client.inspect(address)
-            if (fingerprint == null) {
-                host.onMessage(client.status.value.message)
-                client.forget()
-            } else {
-                host.onMessage("")
-                name = advertised
-                candidate = LgCandidate(client, id, address, fingerprint)
-            }
-        }
+    fun submit() {
+        val result = client.submitPin(pin)
+        submitted = result.ok
+        pinError = result.message.takeUnless { result.ok }
     }
 
-    fun cancel() {
-        val pending = candidate ?: return
-        candidate = null
-        host.run { pending.client.forget() }
-    }
-
-    fun pair(pending: LgCandidate) {
-        host.run {
-            var added = false
-            try {
-                val result = pending.client.pair(pending.host, pending.fingerprint)
-                host.onMessage(result.message)
-                added = result.ok && host.store.add(SavedDevice(pending.id, DeviceKind.Lg, name, pending.host))
-                if (result.ok && !added) host.onMessage(SAVE_FAILED)
-            } finally {
-                candidate = null
-                if (!added) withContext(NonCancellable) { pending.client.forget() }
-            }
-            if (added) host.onAdded()
-        }
-    }
-
-    candidate?.let { pending ->
-        LgPinDialog(pending.client)
-        // Hidden while pairing runs, so the TV's PIN dialog is the only one on screen.
-        if (!host.busy) {
-            LgTrustDialog(
-                name = name,
-                host = pending.host,
-                fingerprint = pending.fingerprint,
-                onName = { name = it },
-                onTrust = { pair(pending) },
-                onCancel = ::cancel,
+    val cancel = StepAction("Cancel", onClick = host.onCancel)
+    when {
+        failure != null ->
+            PairingStep(
+                DeviceKind.Lg,
+                "Couldn't add ${candidate.name}",
+                message = failure,
+                primary = StepAction("Try again") { attempt++ },
+                secondary = cancel,
             )
-        }
-    }
-    Text("LG TV", style = MaterialTheme.typography.titleMedium)
-    found.forEach { tv ->
-        val deviceName = if (tv.name == tv.ip) DeviceKind.Lg.label else tv.name
-        FoundDevice(deviceName, tv.ip, isSaved(tv.ip), enabled = !host.busy) { inspect(tv.ip, deviceName) }
-    }
-    if (scan.isNotEmpty()) Text(scan, style = MaterialTheme.typography.bodySmall)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            manualAddress,
-            { manualAddress = it.trim() },
-            label = { Text("Enter LG TV address") },
-            enabled = !host.busy,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(enabled = !host.busy && manualAddress.isNotEmpty(), onClick = {
-            inspect(manualAddress, DeviceKind.Lg.label)
-        }) { Text("Add") }
+        step == LgStep.Checking ->
+            PairingStep(DeviceKind.Lg, "Checking ${candidate.name}…", busy = true, secondary = cancel)
+        step == LgStep.Confirm ->
+            PairingStep(
+                DeviceKind.Lg,
+                "Add ${candidate.name}",
+                message = "The TV will show a PIN to finish.",
+                primary = StepAction("Connect") { confirmed.complete(Unit) },
+                secondary = cancel,
+            ) {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                LgSecurityDetails(fingerprint)
+            }
+        awaitingPin ->
+            PairingStep(
+                DeviceKind.Lg,
+                "Enter the PIN",
+                message = "Type the PIN shown on the TV.",
+                error = pinError,
+                primary = StepAction("Continue", enabled = pin.length >= LG_PIN_MIN_LENGTH, onClick = ::submit),
+                secondary = cancel,
+            ) {
+                PinField(pin, { pin = it }, maxLength = LG_PIN_MAX_LENGTH, onDone = ::submit)
+            }
+        else ->
+            PairingStep(
+                DeviceKind.Lg,
+                if (submitted) "Checking the PIN…" else "Connecting to $name…",
+                message = if (submitted) null else "A PIN will appear on your TV in a moment.",
+                busy = true,
+                secondary = cancel,
+            )
     }
 }
+
+private const val LG_PIN_MIN_LENGTH = 4
 
 /** LG verifies registration with Connect and opens a fresh, pinned TLS session per press. */
 @Composable
@@ -227,6 +232,7 @@ private fun LgRemote(
         status = (if (busy) status else result ?: status).message,
         onSelect = remote.onSelect,
         onAddDevice = remote.onAddDevice,
+        onDevices = remote.onDevices,
         onConnect = { if (client.fingerprint.isEmpty()) remote.onSettings() else run { client.connect() } },
         onApps = null,
         onSettings = remote.onSettings,
@@ -236,7 +242,7 @@ private fun LgRemote(
     )
 }
 
-/** Re-pair (trust the certificate again and enter a new PIN) and the optional Wake-on-LAN settings. */
+/** Pair again (read the certificate again and enter a new PIN) and the optional Wake-on-LAN settings. */
 @Composable
 private fun LgSettings(
     client: LgClient,
@@ -253,9 +259,7 @@ private fun LgSettings(
     fingerprint?.let { inspected ->
         LgTrustDialog(
             name = device.name,
-            host = device.host,
             fingerprint = inspected,
-            onName = null,
             onTrust = {
                 fingerprint = null
                 run { client.pair(device.host, inspected) }
@@ -263,17 +267,18 @@ private fun LgSettings(
             onCancel = { fingerprint = null },
         )
     }
-    Text("Pairing", style = MaterialTheme.typography.titleMedium)
     Text(status.message)
-    Button(enabled = !busy, onClick = { run { fingerprint = client.inspect(device.host) } }) { Text("Re-pair") }
-    Text(
-        "Re-pair reads the TV's certificate again; pairing finishes with the PIN the TV shows.",
-        style = MaterialTheme.typography.bodySmall,
-    )
-    Text("Wake (optional)", style = MaterialTheme.typography.titleMedium)
-    Text("Discovery does not provide a wake MAC. Enter the TV's active network MAC and subnet broadcast only for wake.")
-    OutlinedTextField(mac, { mac = it }, label = { Text("TV network MAC") }, enabled = !busy)
-    OutlinedTextField(broadcast, { broadcast = it }, label = { Text("Subnet broadcast IPv4") }, enabled = !busy)
-    Button(enabled = !busy, onClick = { run { client.saveWake(device.host, mac, broadcast) } }) { Text("Save wake settings") }
-    Button(enabled = !busy && wakeSaved, onClick = { run { client.send(LgProtocol.Action.Wake) } }) { Text("Wake TV") }
+    OutlinedButton(enabled = !busy, onClick = { run { fingerprint = client.inspect(device.host) } }) { Text("Pair again") }
+    Disclosure("Wake from sleep (advanced)") {
+        Text(
+            "To turn the TV on from the remote, enter the TV's network MAC address and your network's broadcast address.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(mac, { mac = it }, label = { Text("TV network MAC") }, enabled = !busy, singleLine = true)
+        OutlinedTextField(broadcast, { broadcast = it }, label = { Text("Broadcast address") }, enabled = !busy, singleLine = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(enabled = !busy, onClick = { run { client.saveWake(device.host, mac, broadcast) } }) { Text("Save") }
+            OutlinedButton(enabled = !busy && wakeSaved, onClick = { run { client.send(LgProtocol.Action.Wake) } }) { Text("Wake TV") }
+        }
+    }
 }

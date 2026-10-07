@@ -44,6 +44,7 @@ internal fun DebugRemoteScreen(
     navigationEnabled: Boolean,
     onSelect: (SavedDevice) -> Unit,
     onAddDevice: () -> Unit,
+    onDevices: () -> Unit,
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
@@ -74,7 +75,7 @@ internal fun DebugRemoteScreen(
                 "commands" to txCount.toString(),
             ),
         )
-        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice)
+        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice, onManageDevices = onDevices)
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onConnect != null) {
                 TextButton(onClick = onConnect, enabled = !busy) { Text(if (ready) "Reconnect TV" else "Connect TV") }

@@ -29,8 +29,13 @@ The address a saved device was paired at, kept to display and to recognise the d
 _Avoid_: IP, endpoint, address
 
 **Picker**:
-The control that lists the saved devices and switches which one the remote drives.
+The control that lists the saved devices and switches which one the remote drives; it also leads to
+Add a device and the Devices screen.
 _Avoid_: dropdown, selector, device list
+
+**Devices screen**:
+The screen listing every saved device: which one the remote drives, each one's Device settings, and forget.
+_Avoid_: device manager, device list, my devices
 
 **Default device**:
 The saved device the remote opens on when the operator has not picked one: the last device driven while it is still saved, otherwise an Apple TV, otherwise the first saved device.
@@ -73,9 +78,10 @@ _Avoid_: favorite, bookmark, quick launch
 ## Pairing and trust
 
 **Pairing**:
-Establishing the credentials that let the remote command one specific device. An LG TV starts by
-pinning the TV's certificate and, like an Apple TV, finishes with the PIN the device displays; a
-Hue Bridge finishes when the operator presses its link button.
+Establishing the credentials that let the remote command one specific device, shown as one sheet
+over Add a device. An LG TV starts by pinning the TV's certificate when the operator taps Connect
+and, like an Apple TV, finishes with the PIN the device displays; a Hue Bridge finishes when the
+operator presses its link button, which the sheet waits up to 30 seconds for.
 _Avoid_: trust, setup, sync, provisioning
 
 **PIN**:
@@ -88,7 +94,7 @@ every later connection. A bridge uses its public-key hash; a TV uses its certifi
 _Avoid_: thumbprint, key hash
 
 **Re-pair** (LG TV):
-Pairing again with a saved LG TV, replacing its pinned certificate and pairing material.
+Pairing again with a saved LG TV, replacing its pinned certificate and pairing material. The button reads "Pair again".
 _Avoid_: reconnect, re-trust
 
 **Forget**:
@@ -100,11 +106,17 @@ _Avoid_: remove, delete, clear, unpair
 ## Discovery
 
 **Scan**:
-A bounded Wi-Fi search for devices to add, returning LG TVs, Apple TVs and Hue Bridges together.
+A bounded Wi-Fi search for devices to add: every kind searches side by side and Add a device lists
+LG TVs, Apple TVs and Hue Bridges together as each kind answers.
 _Avoid_: discovery, search, browse
 
+**Candidate**:
+A device a scan returned, or the operator typed the address of, that is not saved yet. Picking one starts its pairing.
+_Avoid_: result, found device, discovered device
+
 **Manual address**:
-An IPv4 address the operator types for a device the scan did not return: an LG TV or a Hue Bridge.
+An IPv4 address the operator types, under "Can't find your device?", for a device the scan did not
+return: an LG TV or a Hue Bridge.
 _Avoid_: manual entry, fallback
 
 ## Power

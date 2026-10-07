@@ -27,23 +27,27 @@ adb shell am start -n fi.goodconsulting.kaukosaadin/.MainActivity
 
 ### Adding devices
 
-Fresh installs show **No devices added**. Tap **Find devices** to scan your Wi-Fi: LG TVs,
-Apple TVs and Hue Bridges are found together and listed with their advertised name and address, or
-you can **Enter LG TV address** by hand (a bridge takes its own numeric IPv4 the same way). Tap a
-device to pair it, and it is saved:
+Fresh installs show **No devices added**. Tap **Find devices** to open **Add a device**, which
+scans your Wi-Fi for LG TVs, Apple TVs and Hue Bridges at once and lists them together as they
+answer; devices you already saved are marked **Added**. If yours doesn't show up, **Can't find your
+device?** adds an LG TV or Hue Bridge by its IP address. Tap a device and a sheet walks you through
+pairing; it is saved when that finishes:
 
-- **Apple TV** pairs with the PIN it shows.
-- **LG TV** shows one **Trust this TV?** dialog with an editable name and the TV's certificate
-  fingerprint; **Trust & pair** pins that certificate and the TV then asks for its PIN.
-- **Hue Bridge** pairs when you press the bridge's physical link button, then tap **Pair again**.
+- **Apple TV**: type the 4-digit PIN it shows; it is sent as soon as the last digit is in.
+- **LG TV**: name it and tap **Connect**, then type the PIN the TV shows. Connect pins the TV's
+  certificate; its fingerprint is under **Security details**.
+- **Hue Bridge**: press the bridge's link button. The sheet keeps trying for 30 seconds, so there is
+  nothing else to tap.
 
 Any number of devices of any kind can be saved. The picker at the top of the remote switches
-between them and has **Add device…**. The remote opens on the device you last used; until you pick
-one, an Apple TV is the default if one is saved. **Device settings** renames the device and
-**Forget device** (with confirmation) clears it and its pairing; for LG it also has **Re-pair**
-and the optional Wake-on-LAN settings, and for a Hue Bridge it also clears the stored app key,
-certificate pin and favorites. Upgrading from the single-slot build drops the old LG/Apple TV
-pairings: pair them again from **Find devices**.
+between them and has **Add a device** and **Manage devices**. The remote opens on the device you
+last used; until you pick one, an Apple TV is the default if one is saved. **Manage devices** opens
+**Your devices**: every saved device, the one in use, and per device **Use this device**,
+**Settings** and **Forget…**. **Device settings** renames the device and **Forget this device**
+(with confirmation) clears it and its pairing; for LG it also has **Pair again** and, under **Wake
+from sleep (advanced)**, the optional Wake-on-LAN settings, and for a Hue Bridge forgetting also
+clears the stored app key, certificate pin and favorites. Upgrading from the single-slot build drops
+the old LG/Apple TV pairings: pair them again from **Find devices**.
 
 ### Apple TV
 

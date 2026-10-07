@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -17,7 +19,6 @@ import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionDiscovery
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -26,8 +27,7 @@ import java.util.UUID
 internal object AppleTvIntegration : DeviceIntegration {
     override val kind = DeviceKind.AppleTv
 
-    @Composable
-    override fun Setup(host: SetupHost) = AppleTvSetup(host)
+    override suspend fun scan(context: Context): List<Candidate> = CompanionDiscovery(context).scan().map(::AppleTvCandidate)
 
     override fun controls(
         context: Context,
@@ -72,63 +72,94 @@ private class AppleTvControls(
     override suspend fun forget(): String? = client.forget().takeUnless { it.ok }?.message
 }
 
-/** Apple TV's part of Add device: Companion mDNS results, then PIN pairing and saving. */
-@Suppress("CyclomaticComplexMethod") // Scan and pairing share one state.
-@Composable
-private fun AppleTvSetup(host: SetupHost) {
-    val context = LocalContext.current.applicationContext
-    val discovery = remember { CompanionDiscovery(context) }
-    val saved by host.store.devices.collectAsState()
-    var found by remember { mutableStateOf(emptyList<CompanionDiscovery.Device>()) }
-    var scan by remember { mutableStateOf("") }
-    var pairing by remember { mutableStateOf<CompanionClient?>(null) }
+/** An Apple TV a scan returned; Apple TVs are only added from the scan, never by address. */
+private class AppleTvCandidate(
+    val device: CompanionDiscovery.Device,
+) : Candidate {
+    override val kind = DeviceKind.AppleTv
+    override val name = device.name
+    override val host = device.address.hostAddress.orEmpty()
+    override val detail = null
 
-    LaunchedEffect(host.scanToken) {
-        host.onScanning(true)
-        scan = "Searching for Apple TVs…"
-        try {
-            found = discovery.scan()
-            scan = if (found.isEmpty()) "No Apple TVs found. Wake it with its own remote, then scan again." else ""
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            scan = "Apple TV scan failed. Check Wi-Fi/LAN access, then scan again."
-        } finally {
-            host.onScanning(false)
-        }
-    }
-
-    fun isSaved(address: String) = saved.any { it.kind == DeviceKind.AppleTv && it.host == address }
-
-    fun pair(device: CompanionDiscovery.Device) {
-        host.run {
-            val id = UUID.randomUUID().toString()
-            val client = CompanionClient(context, id)
-            val address = device.address.hostAddress.orEmpty()
-            var added = false
-            pairing = client
-            host.onMessage("Pairing with ${device.name}…")
-            try {
-                val result = client.pair(device)
-                host.onMessage(result.message)
-                added = result.ok && host.store.add(SavedDevice(id, DeviceKind.AppleTv, device.name, address))
-                if (result.ok && !added) host.onMessage(SAVE_FAILED)
-            } finally {
-                pairing = null
-                if (!added) withContext(NonCancellable) { client.forget() }
-            }
-            if (added) host.onAdded()
-        }
-    }
-
-    pairing?.let { AppleTvPinDialog(it) }
-    Text("Apple TV", style = MaterialTheme.typography.titleMedium)
-    found.forEach { device ->
-        val address = device.address.hostAddress.orEmpty()
-        FoundDevice(device.name, address, isSaved(address), enabled = !host.busy) { pair(device) }
-    }
-    if (scan.isNotEmpty()) Text(scan, style = MaterialTheme.typography.bodySmall)
+    @Composable
+    override fun Pairing(host: PairingHost) = AppleTvPairing(this, host)
 }
+
+/**
+ * Companion pairing as one sheet: connecting, then the four-digit PIN the Apple TV shows, sent as
+ * soon as the fourth digit is typed. Each attempt gets a fresh client id; anything it kept is cleared
+ * unless the Apple TV ends up saved.
+ */
+@Composable
+private fun AppleTvPairing(
+    candidate: AppleTvCandidate,
+    host: PairingHost,
+) {
+    val context = LocalContext.current.applicationContext
+    var attempt by remember { mutableIntStateOf(0) }
+    val id = remember(attempt) { UUID.randomUUID().toString() }
+    val client = remember(id) { CompanionClient(context, id) }
+    val awaitingPin by client.awaitingPin.collectAsState()
+    var failure by remember(attempt) { mutableStateOf<String?>(null) }
+    var pin by remember(attempt) { mutableStateOf("") }
+    var pinError by remember(attempt) { mutableStateOf<String?>(null) }
+    var submitted by remember(attempt) { mutableStateOf(false) }
+
+    DisposableEffect(client) { onDispose { client.cancelPairing() } }
+    LaunchedEffect(client) {
+        var added = false
+        try {
+            val result = client.pair(candidate.device)
+            added = result.ok && host.store.add(SavedDevice(id, DeviceKind.AppleTv, candidate.name, candidate.host))
+            if (!added) failure = if (result.ok) SAVE_FAILED else result.message
+        } finally {
+            if (!added) withContext(NonCancellable) { client.forget() }
+        }
+        if (added) host.onAdded()
+    }
+
+    fun submit() {
+        val result = client.submitPin(pin)
+        submitted = result.ok
+        pinError = result.message.takeUnless { result.ok }
+        if (!result.ok) pin = ""
+    }
+
+    val cancel = StepAction("Cancel", onClick = host.onCancel)
+    when {
+        failure != null ->
+            PairingStep(
+                DeviceKind.AppleTv,
+                "Couldn't add ${candidate.name}",
+                message = failure,
+                primary = StepAction("Try again") { attempt++ },
+                secondary = cancel,
+            )
+        awaitingPin ->
+            PairingStep(
+                DeviceKind.AppleTv,
+                "Enter the PIN",
+                message = "Type the 4-digit PIN shown on ${candidate.name}.",
+                error = pinError,
+                secondary = cancel,
+            ) {
+                PinField(pin, onValue = {
+                    pin = it
+                    if (it.length == APPLE_TV_PIN_LENGTH) submit()
+                }, maxLength = APPLE_TV_PIN_LENGTH, onDone = ::submit)
+            }
+        else ->
+            PairingStep(
+                DeviceKind.AppleTv,
+                if (submitted) "Checking the PIN…" else "Connecting to ${candidate.name}…",
+                message = if (submitted) null else "A PIN will appear on your TV in a moment.",
+                busy = true,
+                secondary = cancel,
+            )
+    }
+}
+
+private const val APPLE_TV_PIN_LENGTH = 4
 
 /** The Apple TV session is opened by [AppleTvSessionHost] while this is visible; presses reuse it. */
 @Composable
@@ -154,6 +185,7 @@ private fun AppleTvRemote(
         status = status.message,
         onSelect = remote.onSelect,
         onAddDevice = remote.onAddDevice,
+        onDevices = remote.onDevices,
         onConnect = null,
         onApps = onApps,
         onSettings = remote.onSettings,
@@ -167,10 +199,10 @@ private fun AppleTvRemote(
 @Composable
 private fun AppleTvSettings(client: CompanionClient) {
     val status by client.status.collectAsState()
-    Text("Pairing", style = MaterialTheme.typography.titleMedium)
     Text(status.message)
     Text(
-        "To pair again, forget this Apple TV and add it from the scan. There is no Apple TV wake.",
-        style = MaterialTheme.typography.bodySmall,
+        "To pair again, forget this Apple TV and add it again.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
