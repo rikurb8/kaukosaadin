@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -126,38 +127,91 @@ internal fun RemoteScreen(
         return
     }
 
+    RemoteShell(
+        contentPadding = contentPadding,
+        devices = devices,
+        current = current,
+        ready = ready,
+        busy = busy,
+        status = status,
+        txFlash = { txFlash.value },
+        deck = {
+            PowerDeck(
+                ready = ready,
+                powerEnabled = powerEnabled && !busy,
+                kind = current.kind,
+                txFlash = { txFlash.value },
+                onPower = { power() },
+            )
+        },
+        onSelect = onSelect,
+        onAddDevice = onAddDevice,
+        onDevices = onDevices,
+        onConnect = onConnect,
+        onApps = onApps,
+        onSettings = onSettings,
+        onGeneralSettings = onGeneralSettings,
+        modifier = modifier,
+        body = { dialSize ->
+            RemoteKeys(
+                dialSize = dialSize,
+                kind = current.kind,
+                navigationEnabled = navigationEnabled,
+                onPress = { key, action -> send(key, action) },
+            )
+        },
+    )
+}
+
+/**
+ * The casing every remote shares: the picker, the power deck, the VFD readout, the toolbar, the
+ * kind's own [body] and the footer, all in the same places whichever device is selected, so switching
+ * devices moves the controls rather than the chrome. [fitHeight] scales the whole remote down to fit
+ * when it can, which suits a keypad; a list keeps its own size and scrolls instead.
+ */
+@Composable
+internal fun RemoteShell(
+    contentPadding: PaddingValues,
+    devices: List<SavedDevice>,
+    current: SavedDevice,
+    ready: Boolean,
+    busy: Boolean,
+    status: String,
+    txFlash: () -> Float,
+    deck: @Composable () -> Unit,
+    onSelect: (SavedDevice) -> Unit,
+    onAddDevice: () -> Unit,
+    onDevices: () -> Unit,
+    onConnect: (() -> Unit)?,
+    onApps: (() -> Unit)?,
+    onSettings: () -> Unit,
+    onGeneralSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+    fitHeight: Boolean = true,
+    body: @Composable (dialSize: Dp) -> Unit,
+) {
     var showStatus by remember(current.id) { mutableStateOf(false) }
     if (showStatus) StatusDialog(current, status) { showStatus = false }
 
-    RemoteCasing(contentPadding, modifier) { dialSize ->
-        PowerDeck(
-            ready = ready,
-            powerEnabled = powerEnabled && !busy,
-            kind = current.kind,
-            txFlash = { txFlash.value },
-            onPower = { power() },
-        )
+    RemoteCasing(contentPadding, modifier, fitHeight) { dialSize ->
+        deck()
         StatusControls(
             devices = devices,
             current = current,
             status = status,
             ready = ready,
             busy = busy,
-            txFlash = { txFlash.value },
+            txFlash = txFlash,
             onSelect = onSelect,
             onAddDevice = onAddDevice,
             onDevices = onDevices,
             onConnect = onConnect,
             onApps = onApps,
             onSettings = onSettings,
+            onGeneralSettings = onGeneralSettings,
             onShowStatus = { showStatus = true },
         )
-        RemoteKeys(
-            dialSize = dialSize,
-            kind = current.kind,
-            navigationEnabled = navigationEnabled,
-            onPress = { key, action -> send(key, action) },
-        )
+        body(dialSize)
         RemoteFooter(current.kind)
     }
 }
@@ -196,6 +250,7 @@ private fun rememberStatusLog(status: String): List<LogLine> {
 private fun RemoteCasing(
     contentPadding: PaddingValues,
     modifier: Modifier,
+    fitHeight: Boolean,
     content: @Composable (dialSize: Dp) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -250,7 +305,7 @@ private fun RemoteCasing(
             Column(
                 modifier =
                     Modifier
-                        .fitToHeight(viewportHeight)
+                        .then(if (fitHeight) Modifier.fitToHeight(viewportHeight) else Modifier)
                         .padding(contentPadding)
                         .then(if (framed) Modifier.padding(horizontal = 16.dp, vertical = 8.dp) else Modifier)
                         .then(casing)
@@ -263,7 +318,7 @@ private fun RemoteCasing(
     }
 }
 
-/** Device picker, VFD readout and the connect / apps / device-settings controls. */
+/** Device picker, VFD readout and the remote's toolbar. */
 @Composable
 private fun StatusControls(
     devices: List<SavedDevice>,
@@ -278,10 +333,11 @@ private fun StatusControls(
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
+    onGeneralSettings: () -> Unit,
     onShowStatus: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice, onManageDevices = onDevices)
+        DevicePicker(devices, current, enabled = !busy, onSelect, onAddDevice, onManageDevices = onDevices, onGeneralSettings)
         VfdDisplay(
             kind = current.kind,
             deviceName = current.name,
@@ -299,19 +355,38 @@ private fun StatusControls(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Show full status", onClick = onShowStatus),
         )
-        Row {
-            if (onConnect != null) {
-                TextButton(onClick = onConnect, enabled = !busy) {
-                    Text(if (ready) "Reconnect TV" else "Connect TV")
-                }
-            }
-            if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
-            TextButton(onClick = onSettings, enabled = !busy) { Text("Device settings") }
-        }
+        RemoteToolbar(ready, busy, onConnect, onApps, onSettings)
     }
 }
 
-/** Wake-only note for LG; speaker grille and model engraving at the tail of the casing. */
+/**
+ * The row under every remote's display, in every layout: the kind's own actions on the left (Connect
+ * for an LG TV, Apps for an Apple TV, none for a bridge) and Device settings always at the right edge,
+ * so it is in the same place whichever device is selected. App-wide settings live in the picker.
+ */
+@Composable
+internal fun RemoteToolbar(
+    ready: Boolean,
+    busy: Boolean,
+    onConnect: (() -> Unit)?,
+    onApps: (() -> Unit)?,
+    onSettings: () -> Unit,
+) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        if (onConnect != null) {
+            TextButton(onClick = onConnect, enabled = !busy) { Text(if (ready) "Reconnect TV" else "Connect TV") }
+        }
+        if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onSettings, enabled = !busy) { Text("Device settings") }
+    }
+}
+
+/**
+ * One line about the kind's keys, then the speaker grille and model engraving at the tail of the
+ * casing. Every kind prints exactly one line here, like the spacer that stands in for LG's missing
+ * Play/Pause row: a taller footer on one kind would make fitToHeight shrink that whole remote.
+ */
 @Composable
 private fun RemoteFooter(kind: DeviceKind) {
     Column(
@@ -319,19 +394,25 @@ private fun RemoteFooter(kind: DeviceKind) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (kind == DeviceKind.Lg) {
-            Text(
-                "Wake only · TV power is not monitored",
-                style = MaterialTheme.typography.bodySmall,
-                minLines = 2,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            footerNote(kind),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         SpeakerGrille()
         EngravedLabel("MODEL KS-01 · UNIVERSAL")
     }
 }
+
+/** The footer's line for [kind]: LG's power is wake-only, and Apple TV's Back and Home take gestures (see [gestures]). */
+private fun footerNote(kind: DeviceKind): String =
+    when (kind) {
+        DeviceKind.Lg -> "Wake only · TV power is not monitored"
+        DeviceKind.AppleTv -> "Double-tap or hold Back and Home for more"
+        DeviceKind.Hue -> ""
+    }
 
 /** Full status text; the remote itself only shows a trimmed preview. */
 @Composable

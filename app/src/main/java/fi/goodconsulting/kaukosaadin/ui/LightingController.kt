@@ -359,6 +359,13 @@ internal fun LightingState.groupedLightFor(group: HueGroup): HueGroupedLight? =
 internal val LightingState.orderedLights: List<HueLight>
     get() = favoritesFirst(lights, favoriteLights) { it.id }
 
+/** [group]'s lights, favorites first, in the bridge's order otherwise; a light can sit in one room and several zones. */
+internal fun LightingState.lightsIn(group: HueGroup): List<HueLight> = orderedLights.filter(group::contains)
+
+/** The lights no room claims, favorites first, so a light outside every room is still listed somewhere. */
+internal val LightingState.lightsOutsideRooms: List<HueLight>
+    get() = orderedLights.filter { light -> rooms.none { it.contains(light) } }
+
 /** The bridge's rooms with the operator's favorites first; every room the bridge reported is listed exactly once. */
 internal val LightingState.orderedRooms: List<HueGroup>
     get() = favoritesFirst(rooms, favoriteGroups) { it.id }

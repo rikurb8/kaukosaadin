@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -50,23 +52,41 @@ internal fun PowerDeck(
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         PowerKey(ready, powerEnabled, kind, onPower)
-        Column(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .padding(top = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            TxLamp(txFlash)
-            Text(
-                text = "KAUKOSÄÄDIN",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 3.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-            )
-        }
+        DeckWordmark(txFlash)
+    }
+}
+
+/**
+ * The deck without a power key: a bridge is switched at the wall, so its slot stays blank and the
+ * bridge's picker, readout and toolbar sit exactly where a TV's do.
+ */
+@Composable
+internal fun BridgeDeck(txFlash: () -> Float) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Spacer(Modifier.width(80.dp))
+        DeckWordmark(txFlash)
+    }
+}
+
+/** TX lamp over the casing's wordmark, centred in whatever the deck leaves beside the power key. */
+@Composable
+private fun RowScope.DeckWordmark(txFlash: () -> Float) {
+    Column(
+        modifier =
+            Modifier
+                .weight(1f)
+                .padding(top = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TxLamp(txFlash)
+        Text(
+            text = "KAUKOSÄÄDIN",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 3.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        )
     }
 }
 

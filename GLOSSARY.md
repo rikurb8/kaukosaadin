@@ -30,7 +30,7 @@ _Avoid_: IP, endpoint, address
 
 **Picker**:
 The control that lists the saved devices and switches which one the remote drives; it also leads to
-Add a device and the Devices screen.
+Add a device, the Devices screen and General settings.
 _Avoid_: dropdown, selector, device list
 
 **Devices screen**:

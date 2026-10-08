@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
@@ -75,19 +74,10 @@ internal fun DebugRemoteScreen(
                 "commands" to txCount.toString(),
             ),
         )
-        DevicePicker(devices, current, enabled = !busy, onSelect = onSelect, onAddDevice = onAddDevice, onManageDevices = onDevices)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onConnect != null) {
-                TextButton(onClick = onConnect, enabled = !busy) { Text(if (ready) "Reconnect TV" else "Connect TV") }
-            }
-            if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
-            TextButton(onClick = onSettings, enabled = !busy) { Text("Device settings") }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onGeneralSettings) { Text("General settings") }
-            TextButton(onClick = onPower, enabled = powerEnabled && !busy) {
-                Text(if (current.kind == DeviceKind.Lg) "Wake" else "Sleep")
-            }
+        DevicePicker(devices, current, enabled = !busy, onSelect, onAddDevice, onManageDevices = onDevices, onGeneralSettings)
+        RemoteToolbar(ready, busy, onConnect, onApps, onSettings)
+        TextButton(onClick = onPower, enabled = powerEnabled && !busy) {
+            Text(if (current.kind == DeviceKind.Lg) "Wake" else "Sleep")
         }
         DebugPanel(log.takeLast(DEBUG_LOG_LIMIT).reversed().map { it.time to it.text })
         RemoteKeys(

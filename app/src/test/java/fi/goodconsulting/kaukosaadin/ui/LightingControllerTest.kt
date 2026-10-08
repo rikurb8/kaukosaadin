@@ -360,6 +360,26 @@ class LightingControllerTest {
             assertEquals(lights.toSet(), listed.toSet())
         }
 
+    @Test fun aRoomListsItsOwnLightsFavoritesFirstAndTheRestAreListedOutsideRooms() {
+        val ceiling = HueLight("ceiling", "Ceiling", on = true, brightness = 80.0, ownerId = "device-ceiling")
+        val sofa = HueLight("sofa", "Sofa", on = false, brightness = null, ownerId = "device-sofa")
+        val porch = HueLight("porch", "Porch", on = false, brightness = null, ownerId = "device-porch")
+        val living = HueGroup("living", "Living room", groupedLightId = null, memberIds = setOf("device-ceiling", "device-sofa"))
+        val reading = HueGroup("reading", "Reading", groupedLightId = null, memberIds = setOf("sofa", "porch"))
+        val state =
+            LightingState(
+                rooms = listOf(living),
+                zones = listOf(reading),
+                lights = listOf(ceiling, sofa, porch),
+                favoriteLights = setOf("sofa"),
+            )
+
+        assertEquals(listOf(sofa, ceiling), state.lightsIn(living))
+        assertEquals(listOf(sofa, porch), state.lightsIn(reading))
+        // A zone does not take a light out of "outside rooms": only a room does.
+        assertEquals(listOf(porch), state.lightsOutsideRooms)
+    }
+
     @Test fun aZoneIsControlledAndFavoritedThroughItsGroupedLight() =
         runBlocking {
             val fake =

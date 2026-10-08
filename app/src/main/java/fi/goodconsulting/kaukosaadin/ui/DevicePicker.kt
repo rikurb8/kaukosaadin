@@ -23,7 +23,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 
-/** The saved devices the remote can drive, plus ways to add one or manage them; shared by every layout. */
+/**
+ * The saved devices the remote can drive, plus ways to add one, manage them and reach General
+ * settings; shared by every remote, so the app-wide entries sit in the same menu whichever device is
+ * selected.
+ */
 @Composable
 internal fun DevicePicker(
     devices: List<SavedDevice>,
@@ -32,6 +36,7 @@ internal fun DevicePicker(
     onSelect: (SavedDevice) -> Unit,
     onAddDevice: () -> Unit,
     onManageDevices: () -> Unit,
+    onGeneralSettings: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
@@ -74,20 +79,19 @@ internal fun DevicePicker(
                 )
             }
             HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text("Add a device") },
-                onClick = {
-                    open = false
-                    onAddDevice()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Manage devices") },
-                onClick = {
-                    open = false
-                    onManageDevices()
-                },
-            )
+            listOf(
+                "Add a device" to onAddDevice,
+                "Manage devices" to onManageDevices,
+                "General settings" to onGeneralSettings,
+            ).forEach { (label, onClick) ->
+                DropdownMenuItem(
+                    text = { Text(label) },
+                    onClick = {
+                        open = false
+                        onClick()
+                    },
+                )
+            }
         }
     }
 }

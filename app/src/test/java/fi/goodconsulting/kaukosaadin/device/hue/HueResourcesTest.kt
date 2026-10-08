@@ -58,6 +58,20 @@ class HueResourcesTest {
         )
     }
 
+    @Test fun aRoomHoldsItsLightsThroughTheirOwningDevice() {
+        val room = HueResources.rooms(envelope(ROOM_WITH_CHILDREN)).single()
+        val lights = HueResources.lights(envelope(OWNED_LIGHTS))
+        assertEquals(setOf("device-1", "device-2"), room.memberIds)
+        assertEquals("device-1", lights[0].ownerId)
+        assertEquals(listOf("light-1"), lights.filter(room::contains).map { it.id })
+    }
+
+    @Test fun aZoneHoldsItsLightsByTheirOwnId() {
+        val zone = HueResources.zones(envelope(ZONE_WITH_CHILDREN)).single()
+        val lights = HueResources.lights(envelope(OWNED_LIGHTS))
+        assertEquals(listOf("light-2"), lights.filter(zone::contains).map { it.id })
+    }
+
     @Test fun aGroupedLightDecodesItsIdOnAndBrightness() {
         val groups = HueResources.groupedLights(envelope(GROUPS))
         assertEquals(
@@ -113,6 +127,23 @@ class HueResourcesTest {
                 {"id":"zone-1","type":"zone","metadata":{"name":"Downstairs"},
                  "services":[{"rid":"grouped-9","rtype":"grouped_light"}]},
                 {"id":"zone-2","type":"zone","metadata":{"name":"Garden"}}
+            ]}"""
+
+        const val ROOM_WITH_CHILDREN =
+            """{"errors":[],"data":[
+                {"id":"room-1","type":"room","metadata":{"name":"Living room"},
+                 "children":[{"rid":"device-1","rtype":"device"},{"rid":"device-2","rtype":"device"},{"rid":"","rtype":"device"}]}
+            ]}"""
+
+        const val ZONE_WITH_CHILDREN =
+            """{"errors":[],"data":[
+                {"id":"zone-1","type":"zone","metadata":{"name":"Reading"},"children":[{"rid":"light-2","rtype":"light"}]}
+            ]}"""
+
+        const val OWNED_LIGHTS =
+            """{"errors":[],"data":[
+                {"id":"light-1","type":"light","owner":{"rid":"device-1","rtype":"device"},"on":{"on":true}},
+                {"id":"light-2","type":"light","owner":{"rid":"device-9","rtype":"device"},"on":{"on":false}}
             ]}"""
 
         const val GROUPS =

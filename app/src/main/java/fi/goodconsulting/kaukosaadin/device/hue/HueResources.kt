@@ -11,6 +11,8 @@ internal data class HueLight(
     val on: Boolean,
     /** 0–100, or null when the light reports no dimming value. */
     val brightness: Double?,
+    /** The device that owns this light (`owner.rid`); a room lists its members by device, so this is how a light finds its room. */
+    val ownerId: String? = null,
 )
 
 /** One grouped light: `on` is true when any light is on; brightness averages the on lights only. */
@@ -29,7 +31,12 @@ internal data class HueGroup(
     val id: String,
     val name: String,
     val groupedLightId: String?,
-)
+    /** The ids in `children[]`: devices for a room, lights for a zone. [contains] matches a light against either. */
+    val memberIds: Set<String> = emptySet(),
+) {
+    /** Whether [light] belongs here: named directly, as a zone does, or through its owning device, as a room does. */
+    fun contains(light: HueLight): Boolean = light.id in memberIds || light.ownerId in memberIds
+}
 
 /** The v2 response envelope: `{"errors":[{"description","type"}],"data":[...]}`. */
 internal class HueEnvelope(
@@ -65,6 +72,7 @@ internal object HueResources {
                 name = name(resource),
                 on = HueState.on(resource) ?: false,
                 brightness = HueState.brightness(resource),
+                ownerId = resource.optJSONObject("owner")?.optString("rid")?.takeIf { it.isNotBlank() },
             )
         }
 
@@ -92,6 +100,7 @@ internal object HueResources {
             id = resource.optString("id"),
             name = name(resource),
             groupedLightId = groupedLightId(resource),
+            memberIds = memberIds(resource),
         )
 
     // The list endpoint is already filtered by type; entries without a matching type or an id are junk.
@@ -119,6 +128,14 @@ internal object HueResources {
             .orEmpty()
             .trim()
             .ifBlank { resource.optString("id") }
+
+    /** Every `rid` in `children[]`, whatever its `rtype`; blank ones are dropped. */
+    private fun memberIds(resource: JSONObject): Set<String> {
+        val children = resource.optJSONArray("children") ?: return emptySet()
+        return (0 until children.length())
+            .mapNotNull { children.optJSONObject(it)?.optString("rid")?.takeIf { rid -> rid.isNotBlank() } }
+            .toSet()
+    }
 
     /** Found in `services[]` where `rtype == "grouped_light"`; other service types are ignored. */
     private fun groupedLightId(resource: JSONObject): String? {
