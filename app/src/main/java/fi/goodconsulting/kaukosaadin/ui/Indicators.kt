@@ -1,127 +1,56 @@
 package fi.goodconsulting.kaukosaadin.ui
 
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 
-/** Power button for the saved TV: wake-only on LG, sleep on the Apple TV. The LED indicates
- *  registration, not power. */
-@Composable
-internal fun PowerDeck(
-    ready: Boolean,
-    powerEnabled: Boolean,
-    kind: DeviceKind,
-    txFlash: () -> Float,
-    onPower: () -> Unit,
-) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        PowerKey(ready, powerEnabled, kind, onPower)
-        DeckWordmark(txFlash)
-    }
-}
-
-/**
- * The deck without a power key: a bridge is switched at the wall, so its slot stays blank and the
- * bridge's picker, readout and toolbar sit exactly where a TV's do.
- */
-@Composable
-internal fun BridgeDeck(txFlash: () -> Float) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Spacer(Modifier.width(80.dp))
-        DeckWordmark(txFlash)
-    }
-}
-
-/** TX lamp over the casing's wordmark, centred in whatever the deck leaves beside the power key. */
-@Composable
-private fun RowScope.DeckWordmark(txFlash: () -> Float) {
-    Column(
-        modifier =
-            Modifier
-                .weight(1f)
-                .padding(top = 18.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        TxLamp(txFlash)
-        Text(
-            text = "KAUKOSÄÄDIN",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 3.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-        )
-    }
-}
-
+/** Deliberately separate from navigation: wake-only on LG, sleep-only on Apple TV. */
 @Composable
 internal fun PowerKey(
-    ready: Boolean,
     enabled: Boolean,
     kind: DeviceKind,
     onClick: () -> Unit,
 ) {
     val lg = kind == DeviceKind.Lg
+    val colors = MaterialTheme.colorScheme
     Column(
-        modifier = Modifier.width(80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Led(ready)
         Key(
             onClick = onClick,
             enabled = enabled,
-            shape = CircleShape,
-            face = PowerRed,
-            elevation = 6.dp,
+            shape = RoundedCornerShape(18.dp),
+            face = colors.primaryContainer,
             haptic = HapticFeedbackConstants.LONG_PRESS,
             modifier =
-                Modifier
-                    .size(58.dp)
-                    .semantics {
-                        contentDescription = if (lg) "Wake TV" else "Sleep Apple TV"
-                        stateDescription = if (ready) "Registration verified" else "Not connected"
-                    },
+                Modifier.size(52.dp).semantics {
+                    contentDescription = if (lg) "Wake TV" else "Sleep Apple TV"
+                },
         ) {
-            PowerGlyph(OnPowerRed, Modifier.size(22.dp))
+            PowerGlyph(if (enabled) colors.onPrimaryContainer else colors.onSurfaceVariant, Modifier.size(22.dp))
         }
-        EngravedLabel(if (lg) "WAKE" else "SLEEP")
+        Text(if (lg) "Wake" else "Sleep", style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -176,92 +105,14 @@ internal fun PlayPauseGlyph(
     }
 }
 
-/** Registration LED: glowing green when verified, otherwise a dark unlit bead. */
-@Composable
-internal fun Led(isOn: Boolean) {
-    val color by animateColorAsState(if (isOn) LedOn else LedOff, label = "led")
-    Canvas(Modifier.size(7.dp)) {
-        val r = size.minDimension / 2
-        if (isOn) {
-            drawCircle(
-                brush = Brush.radialGradient(listOf(color.copy(alpha = 0.5f), Color.Transparent), center, r * 2.6f),
-                radius = r * 2.6f,
-            )
-        }
-        drawCircle(color, r)
-        drawCircle(Color.White.copy(alpha = 0.55f), r * 0.32f, center + Offset(-r * 0.3f, -r * 0.3f))
-    }
-}
-
-/** Smoked lens at the nose of the remote; flares red for each command. */
-@Composable
-internal fun TxLamp(flash: () -> Float) {
-    Canvas(Modifier.size(width = 60.dp, height = 16.dp)) {
-        val corner = CornerRadius(size.height / 2)
-        drawRoundRect(TxLens, cornerRadius = corner)
-        val f = flash()
-        if (f > 0f) {
-            drawRoundRect(
-                brush =
-                    Brush.radialGradient(
-                        listOf(TxGlow.copy(alpha = f), TxGlow.copy(alpha = 0.25f * f), Color.Transparent),
-                        center = center,
-                        radius = size.width / 2,
-                    ),
-                cornerRadius = corner,
-            )
-        }
-        drawRoundRect(
-            brush =
-                Brush.verticalGradient(
-                    listOf(Color.White.copy(alpha = 0.28f), Color.Transparent),
-                    endY = size.height * 0.6f,
-                ),
-            cornerRadius = corner,
-        )
-        drawRoundRect(Color.Black.copy(alpha = 0.5f), cornerRadius = corner, style = Stroke(1.dp.toPx()))
-    }
-}
-
-/** Small caps printed into the casing, with a one-pixel lip below. */
+/** Small, widely spaced wordmark for the welcome screen. */
 @Composable
 internal fun EngravedLabel(text: String) {
-    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Text(
         text = text,
-        style =
-            MaterialTheme.typography.labelSmall.copy(
-                shadow =
-                    Shadow(
-                        color = if (dark) Color.Black.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.85f),
-                        offset = Offset(0f, 1.5f),
-                    ),
-            ),
+        style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 2.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-/** Staggered grid of punched holes at the tail of the casing. */
-@Composable
-internal fun SpeakerGrille() {
-    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val hole = if (dark) Color.Black.copy(alpha = 0.55f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-    val lip = if (dark) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.9f)
-    Canvas(Modifier.size(width = 140.dp, height = 18.dp)) {
-        val rows = 3
-        val cols = 16
-        val dx = size.width / cols
-        val dy = size.height / rows
-        val r = 1.7.dp.toPx()
-        for (row in 0 until rows) {
-            val stagger = if (row % 2 == 1) dx / 2 else 0f
-            for (col in 0 until cols - row % 2) {
-                val c = Offset(dx * (col + 0.5f) + stagger, dy * (row + 0.5f))
-                drawCircle(lip, r, c + Offset(0f, 0.8.dp.toPx()))
-                drawCircle(hole, r, c)
-            }
-        }
-    }
 }

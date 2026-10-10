@@ -41,7 +41,7 @@ private val candidates = devices.map(::PreviewCandidate)
 
 @Composable
 private fun PreviewFrame(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = LightColors) {
+    MaterialTheme(colorScheme = LightColors, typography = AppTypography, shapes = AppShapes) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             content()
         }
@@ -111,6 +111,24 @@ fun EmptyRemoteScreenshot() {
     PreviewFrame { EmptyRemoteScreen(PaddingValues(0.dp), {}, {}) }
 }
 
+@PreviewTest
+@Preview(widthDp = 320, heightDp = 568, fontScale = 1.3f)
+@Composable
+fun CompactWelcomeScreenshot() {
+    PreviewFrame { EmptyRemoteScreen(PaddingValues(0.dp), {}, {}) }
+}
+
+@PreviewTest
+@Preview(widthDp = 412, heightDp = 915)
+@Composable
+fun DarkWelcomeScreenshot() {
+    MaterialTheme(colorScheme = DarkColors, typography = AppTypography, shapes = AppShapes) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            EmptyRemoteScreen(PaddingValues(0.dp), {}, {})
+        }
+    }
+}
+
 // Pairing captures show the real step content, without a modal window or a device connection.
 @Composable
 private fun PairingFrame(content: @Composable () -> Unit) {
@@ -125,6 +143,13 @@ private fun PairingFrame(content: @Composable () -> Unit) {
 @Preview(widthDp = 412, heightDp = 600)
 @Composable
 fun AppleTvPinScreenshot() {
+    PairingFrame { AppleTvPinStep(devices.first().name, "12", null, StepAction("Cancel") {}, {}, {}) }
+}
+
+@PreviewTest
+@Preview(widthDp = 320, heightDp = 480, fontScale = 1.3f)
+@Composable
+fun CompactPinScreenshot() {
     PairingFrame { AppleTvPinStep(devices.first().name, "12", null, StepAction("Cancel") {}, {}, {}) }
 }
 

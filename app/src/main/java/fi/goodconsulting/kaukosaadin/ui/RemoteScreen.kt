@@ -4,8 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,15 +17,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -35,12 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -49,14 +46,6 @@ import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.time.LocalTime
-import java.util.Locale
-
-/**
- * Wider than this (tablets, unfolded foldables) the remote stays phone-sized
- * as a framed casing on a backdrop; narrower, the casing is the whole screen.
- */
-internal val FramedMinWidth = 480.dp
-internal val FramedMaxWidth = 420.dp
 
 /**
  * Drives [current], one of the saved [devices]; controls require verified registration (LG) or
@@ -149,12 +138,10 @@ internal fun RemoteScreen(
         status = status,
         txFlash = { txFlash.value },
         deck = {
-            PowerDeck(
-                ready = ready,
-                powerEnabled = powerEnabled && !busy,
+            PowerKey(
+                enabled = powerEnabled && !busy,
                 kind = current.kind,
-                txFlash = { txFlash.value },
-                onPower = { power() },
+                onClick = { power() },
             )
         },
         onSelect = onSelect,
@@ -173,17 +160,14 @@ internal fun RemoteScreen(
                 onPress = { key, action -> send(key, action) },
                 skipSupport = skipSupport,
                 onSkip = skip,
+                fitToScreen = true,
             )
         },
     )
 }
 
-/**
- * The casing every remote shares: the picker, the power deck, the VFD readout, the toolbar, the
- * kind's own [body] and the footer, all in the same places whichever device is selected, so switching
- * devices moves the controls rather than the chrome. [fitHeight] scales the whole remote down to fit
- * when it can, which suits a keypad; a list keeps its own size and scrolls instead.
- */
+/** Shared device header and status, followed by the kind's controls: the TV kinds share one fitted
+ * viewport, while the bridge keeps a scrolling list that never shrinks the rooms' text. */
 @Composable
 internal fun RemoteShell(
     contentPadding: PaddingValues,
@@ -193,7 +177,6 @@ internal fun RemoteShell(
     busy: Boolean,
     status: String,
     txFlash: () -> Float,
-    deck: @Composable () -> Unit,
     onSelect: (SavedDevice) -> Unit,
     onAddDevice: () -> Unit,
     onDevices: () -> Unit,
@@ -202,32 +185,89 @@ internal fun RemoteShell(
     onSettings: () -> Unit,
     onGeneralSettings: () -> Unit,
     modifier: Modifier = Modifier,
-    fitHeight: Boolean = true,
+    deck: @Composable () -> Unit = {},
     body: @Composable (dialSize: Dp) -> Unit,
 ) {
     var showStatus by remember(current.id) { mutableStateOf(false) }
     if (showStatus) StatusDialog(current, status) { showStatus = false }
 
-    RemoteCasing(contentPadding, modifier, fitHeight) { dialSize ->
-        deck()
-        StatusControls(
-            devices = devices,
-            current = current,
-            status = status,
-            ready = ready,
-            busy = busy,
-            txFlash = txFlash,
-            onSelect = onSelect,
-            onAddDevice = onAddDevice,
-            onDevices = onDevices,
-            onConnect = onConnect,
-            onApps = onApps,
-            onSettings = onSettings,
-            onGeneralSettings = onGeneralSettings,
-            onShowStatus = { showStatus = true },
-        )
+    if (current.kind != DeviceKind.Hue) {
+        RemoteViewport(contentPadding, modifier, body) { landscape ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        DevicePicker(devices, current, !busy, onSelect, onAddDevice, onDevices, onGeneralSettings, compact = true)
+                    }
+                    deck()
+                }
+                if (landscape) {
+                    ConnectionStrip(ready, busy, status, txFlash, compact = true) { showStatus = true }
+                    RemoteToolbar(ready, busy, onConnect, onApps, onSettings, compact = true)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ConnectionStrip(ready, busy, status, txFlash, Modifier.weight(1f), compact = true) { showStatus = true }
+                        RemoteToolbar(ready, busy, onConnect, onApps, onSettings, compact = true)
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    RemotePage(contentPadding, modifier) { dialSize ->
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("KAUKOSÄÄDIN", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text("Set the mood.", style = MaterialTheme.typography.headlineLarge)
+            }
+            deck()
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            DevicePicker(devices, current, enabled = !busy, onSelect, onAddDevice, onManageDevices = onDevices, onGeneralSettings)
+            ConnectionStrip(ready, busy, status, txFlash) { showStatus = true }
+            RemoteToolbar(ready, busy, onConnect, onApps, onSettings)
+        }
         body(dialSize)
-        RemoteFooter(current.kind)
+    }
+}
+
+/** The TV remotes' safe viewport, with the header alongside the controls in landscape. */
+@Composable
+private fun RemoteViewport(
+    contentPadding: PaddingValues,
+    modifier: Modifier,
+    body: @Composable (Dp) -> Unit,
+    header: @Composable (landscape: Boolean) -> Unit,
+) {
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+        BoxWithConstraints(
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(contentPadding)
+                .padding(12.dp),
+        ) {
+            val landscape = maxWidth > maxHeight
+            val dialSize = minOf(maxWidth, maxHeight)
+            if (landscape) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(0.5f)) { header(true) }
+                    Column(Modifier.weight(1f)) { body(dialSize) }
+                }
+            } else {
+                Column(
+                    Modifier.widthIn(max = 440.dp).fillMaxSize().align(Alignment.Center),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    header(false)
+                    Column(Modifier.weight(1f)) { body(dialSize) }
+                }
+            }
+        }
     }
 }
 
@@ -255,127 +295,77 @@ private fun rememberStatusLog(status: String): List<LogLine> {
     return log
 }
 
-/**
- * Frames the remote: on a phone the phone *is* the remote and the casing fills the
- * screen behind the system bars; wide screens keep a phone-sized casing on the
- * desk backdrop instead of stretching the keys across it. The content slot receives
- * the dial size the casing dictates.
- */
+/** A readable, centered control panel on wide screens; smaller screens scroll without shrinking. */
 @Composable
-private fun RemoteCasing(
+private fun RemotePage(
     contentPadding: PaddingValues,
     modifier: Modifier,
-    fitHeight: Boolean,
     content: @Composable (dialSize: Dp) -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
-    val casingBrush = Brush.verticalGradient(listOf(colors.surface.tint(0.05f), colors.surface.shade(0.06f)))
-    val casingShape = RoundedCornerShape(32.dp)
-    val screwColor = colors.outline
-    BoxWithConstraints(modifier.fillMaxSize()) {
-        val framed = maxWidth >= FramedMinWidth
-        val casingWidth = if (framed) FramedMaxWidth else maxWidth
-        val dialSize = (casingWidth * 0.62f).coerceIn(MinDialSize, MaxDialSize)
-        // Captured for fitToHeight: the scroll container's ColumnScope shadows the
-        // BoxWithConstraints scope inside the content lambda.
-        val viewportHeight = maxHeight
-        val visibleHeight = viewportHeight - contentPadding.calculateTopPadding() - contentPadding.calculateBottomPadding()
-        val casing =
-            if (framed) {
-                Modifier
-                    .width(FramedMaxWidth)
-                    .shadow(elevation = 16.dp, shape = casingShape)
-                    .clip(casingShape)
-                    .background(casingBrush)
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.18f), colors.outline)),
-                        shape = casingShape,
-                    ).drawBehind {
-                        val inset = 15.dp.toPx()
-                        val radius = 4.5.dp.toPx()
-                        screw(Offset(inset, inset), radius, 35f, screwColor)
-                        screw(Offset(size.width - inset, inset), radius, -20f, screwColor)
-                        screw(Offset(inset, size.height - inset), radius, 80f, screwColor)
-                        screw(Offset(size.width - inset, size.height - inset), radius, 10f, screwColor)
-                    }
-            } else {
-                // Fill the visible height so spare room spreads between
-                // sections rather than pooling under the grille.
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = visibleHeight)
-            }
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .then(if (framed) Modifier else Modifier.background(casingBrush))
-                    // Fitting keeps the whole remote on screen while it can; past the
-                    // scale floor the rest scrolls, so the system font setting keeps
-                    // growing the text instead of being scaled away.
-                    .verticalScroll(rememberScrollState()),
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(contentPadding)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .then(if (fitHeight) Modifier.fitToHeight(viewportHeight) else Modifier)
-                        .padding(contentPadding)
-                        .then(if (framed) Modifier.padding(horizontal = 16.dp, vertical = 8.dp) else Modifier)
-                        .then(casing)
-                        .padding(horizontal = 20.dp, vertical = 18.dp),
-                verticalArrangement = if (framed) Arrangement.spacedBy(18.dp) else spacedEvenly(atLeast = 18.dp),
-            ) {
-                content(dialSize)
+            BoxWithConstraints(Modifier.widthIn(max = 440.dp).fillMaxWidth().padding(20.dp)) {
+                val dialSize = maxWidth.coerceAtMost(280.dp)
+                Column(
+                    Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    content(dialSize)
+                }
             }
         }
     }
 }
 
-/** Device picker, VFD readout and the remote's toolbar. */
+/** Readiness is text, not just color; the full diagnostic remains one tap away. */
 @Composable
-private fun StatusControls(
-    devices: List<SavedDevice>,
-    current: SavedDevice,
-    status: String,
+private fun ConnectionStrip(
     ready: Boolean,
     busy: Boolean,
+    status: String,
     txFlash: () -> Float,
-    onSelect: (SavedDevice) -> Unit,
-    onAddDevice: () -> Unit,
-    onDevices: () -> Unit,
-    onConnect: (() -> Unit)?,
-    onApps: (() -> Unit)?,
-    onSettings: () -> Unit,
-    onGeneralSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
     onShowStatus: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DevicePicker(devices, current, enabled = !busy, onSelect, onAddDevice, onManageDevices = onDevices, onGeneralSettings)
-        VfdDisplay(
-            kind = current.kind,
-            deviceName = current.name,
-            ready = ready,
-            status = status.uppercase(Locale.US),
-            txFlash = txFlash,
-        )
-        Text(
-            status,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            // Stable footprint; the full diagnostic remains available on tap.
-            minLines = 3,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Show full status", onClick = onShowStatus),
-        )
-        RemoteToolbar(ready, busy, onConnect, onApps, onSettings)
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier
+            .then(if (compact) Modifier else Modifier.fillMaxWidth())
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClickLabel = "Show full status", onClick = onShowStatus)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(8.dp)) {
+            drawCircle(if (ready) colors.primary else colors.onSurfaceVariant)
+            drawCircle(colors.onSurface, alpha = txFlash().coerceIn(0f, 1f))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                when {
+                    busy -> "Working…"
+                    ready -> "Ready"
+                    else -> "Not connected"
+                },
+                style = MaterialTheme.typography.labelLarge,
+            )
+            if (!compact) Text(status, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        if (!compact) Text("Details ↗", style = MaterialTheme.typography.labelMedium, color = colors.primary)
     }
 }
 
 /**
- * The row under every remote's display, in every layout: the kind's own actions on the left (Connect
+ * The row under every remote's device header: the kind's own actions on the left (Connect
  * for an LG TV, Apps for an Apple TV, none for a bridge) and Device settings always at the right edge,
  * so it is in the same place whichever device is selected. App-wide settings live in the picker.
  */
@@ -386,42 +376,19 @@ internal fun RemoteToolbar(
     onConnect: (() -> Unit)?,
     onApps: (() -> Unit)?,
     onSettings: () -> Unit,
+    compact: Boolean = false,
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(if (compact) Modifier else Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (onConnect != null) {
             TextButton(onClick = onConnect, enabled = !busy) { Text(if (ready) "Reconnect TV" else "Connect TV") }
         }
         if (onApps != null) TextButton(onClick = onApps, enabled = !busy) { Text("Apps") }
-        Spacer(Modifier.weight(1f))
-        TextButton(onClick = onSettings, enabled = !busy) { Text("Device settings") }
+        if (!compact) Spacer(Modifier.weight(1f))
+        TextButton(onClick = onSettings, enabled = !busy) { Text(if (compact) "Settings" else "Device settings") }
     }
 }
 
-/**
- * One line about the kind's keys, then the speaker grille and model engraving at the tail of the
- * casing. Every kind prints exactly one line here, like the spacer that stands in for LG's missing
- * Play/Pause row: a taller footer on one kind would make fitToHeight shrink that whole remote.
- */
-@Composable
-private fun RemoteFooter(kind: DeviceKind) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            footerNote(kind),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        SpeakerGrille()
-        EngravedLabel("MODEL KS-01 · UNIVERSAL")
-    }
-}
-
-/** The footer's line for [kind]: LG's power is wake-only, and Apple TV's Back and Home take gestures (see [gestures]). */
+/** The line [kind]'s status dialog adds: LG's power is wake-only, and Apple TV's Back and Home take gestures (see [gestures]). */
 private fun footerNote(kind: DeviceKind): String =
     when (kind) {
         DeviceKind.Lg -> "Wake only · TV power is not monitored"
@@ -439,7 +406,12 @@ private fun StatusDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${device.name} status") },
-        text = { Text(status) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(status)
+                footerNote(device.kind).takeIf { it.isNotEmpty() }?.let { Text(it) }
+            }
+        },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
 }

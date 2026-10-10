@@ -166,7 +166,7 @@ internal fun DeviceCard(
     tag: String? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(12.dp)
     Surface(
         modifier =
             modifier
@@ -175,6 +175,7 @@ internal fun DeviceCard(
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = shape,
         color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
     ) {
         Row(
             Modifier

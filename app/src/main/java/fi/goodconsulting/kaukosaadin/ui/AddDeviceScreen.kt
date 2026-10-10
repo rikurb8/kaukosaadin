@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -106,13 +108,14 @@ internal fun AddDeviceContent(
             .fillMaxSize()
             .padding(padding)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         TextButton(onClick = onBack) { Text("Close") }
-        Text("Add a device", style = MaterialTheme.typography.headlineMedium)
+        DeviceIllustration(Modifier.height(112.dp))
+        Text("Let's find your devices", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Choose a TV, Apple TV or Hue Bridge on your Wi-Fi.",
+            "Keep your device switched on and this phone on the same Wi-Fi. Tap a device to connect.",
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -125,6 +128,12 @@ internal fun AddDeviceContent(
                 onClick = if (row.saved) null else ({ onPair(row.candidate) }),
                 dimmed = row.saved,
                 tag = if (row.saved) "Added" else null,
+                trailing =
+                    if (row.saved) {
+                        null
+                    } else {
+                        { Text("→", color = MaterialTheme.colorScheme.primary, modifier = Modifier.clearAndSetSemantics {}) }
+                    },
             )
         }
         view.failureNote?.let {

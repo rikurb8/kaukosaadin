@@ -14,13 +14,14 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -33,15 +34,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
@@ -57,9 +56,6 @@ import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.util.Locale
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /** Remote keys and the command each device kind sends; LG has no Home, Play/Pause or volume key. */
 internal enum class RemoteKey(
@@ -78,19 +74,17 @@ internal enum class RemoteKey(
     VolumeUp(null, HidCommand.VolumeUp),
 }
 
-/** Arrows on the dial: glyph rotation, placement, and the quarter that tilts when held. Angles
- *  are a 90°-per-quarter geometry table, not tunables. */
+/** Arrow rotation and placement on the directional pad. */
 @Suppress("MagicNumber")
 internal enum class Direction(
     val key: RemoteKey,
     val rotation: Float,
     val alignment: Alignment,
-    val wedgeStart: Float,
 ) {
-    Up(RemoteKey.Up, 0f, Alignment.TopCenter, -135f),
-    Right(RemoteKey.Right, 90f, Alignment.CenterEnd, -45f),
-    Down(RemoteKey.Down, 180f, Alignment.BottomCenter, 45f),
-    Left(RemoteKey.Left, 270f, Alignment.CenterStart, 135f),
+    Up(RemoteKey.Up, 0f, Alignment.TopCenter),
+    Right(RemoteKey.Right, 90f, Alignment.CenterEnd),
+    Down(RemoteKey.Down, 180f, Alignment.BottomCenter),
+    Left(RemoteKey.Left, 270f, Alignment.CenterStart),
     ;
 
     val label get() = key.name
@@ -102,7 +96,7 @@ internal fun gestures(
     key: RemoteKey,
 ) = kind == DeviceKind.AppleTv && (key == RemoteKey.Back || key == RemoteKey.Home)
 
-/** Wheel plus Back/Home/Play-Pause keys; shared by every layout. */
+/** Navigation first; playback is a separate group and only exists for Apple TV. */
 @Composable
 internal fun RemoteKeys(
     dialSize: Dp,
@@ -111,54 +105,138 @@ internal fun RemoteKeys(
     onPress: (RemoteKey, PressAction) -> Unit,
     skipSupport: CompanionSkipSupport = CompanionSkipSupport(),
     onSkip: ((Double) -> Unit)? = null,
+    fitToScreen: Boolean = false,
 ) {
+    if (fitToScreen) {
+        val keys = faceKeys(kind)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth > maxHeight) {
+                Row(
+                    Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FittedNavigation(Modifier.weight(1f), kind, keys, navigationEnabled, onPress)
+                    if (kind == DeviceKind.AppleTv) {
+                        PlaybackKeys(navigationEnabled, onPress, skipSupport, onSkip, Modifier.weight(1f), compact = true, stacked = true)
+                    }
+                }
+            } else {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FittedNavigation(Modifier.weight(1f), kind, keys, navigationEnabled, onPress)
+                    if (kind == DeviceKind.AppleTv) PlaybackKeys(navigationEnabled, onPress, skipSupport, onSkip, compact = true)
+                }
+            }
+        }
+        return
+    }
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Dpad(
-            diameter = dialSize,
-            enabled = navigationEnabled,
-            onPress = { onPress(it, PressAction.Tap) },
-        )
-        // Siri Remote order: Back and Home side by side, then Play/Pause and volume below.
-        val pillRows =
-            if (kind == DeviceKind.AppleTv) {
-                listOf(
-                    listOf(RemoteKey.Back, RemoteKey.Home),
-                    listOf(RemoteKey.PlayPause, RemoteKey.VolumeDown, RemoteKey.VolumeUp),
+        Text("01 / NAVIGATE", Modifier.align(Alignment.Start), style = MaterialTheme.typography.labelSmall)
+        Dpad(dialSize, navigationEnabled) { onPress(it, PressAction.Tap) }
+        val keys = faceKeys(kind)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            keys.forEach { key ->
+                PillKey(
+                    key,
+                    Modifier.weight(1f),
+                    kind,
+                    colors.surface,
+                    colors.onSurface,
+                    navigationEnabled,
+                    onPress,
                 )
-            } else {
-                listOf(listOf(RemoteKey.Back))
-            }
-        val legend = if (navigationEnabled) colors.onSecondaryContainer else colors.onSurfaceVariant
-        pillRows.forEach { row ->
-            // Each row sizes its own pills: the Play/Pause row has three, the others two or one.
-            val pillWidth = (dialSize - 24.dp - 12.dp * (row.size - 1)) / row.size
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { key ->
-                    PillKey(key, pillWidth, kind, colors.secondaryContainer, legend, navigationEnabled, onPress)
-                }
             }
         }
         if (kind == DeviceKind.AppleTv) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton(
-                    onClick = { onSkip?.invoke(-10.0) },
-                    enabled = navigationEnabled && onSkip != null && skipSupport.backward,
-                    modifier = Modifier.height(48.dp).semantics { contentDescription = "Skip backward 10 seconds" },
-                ) { Text("−10s") }
-                TextButton(
-                    onClick = { onSkip?.invoke(10.0) },
-                    enabled = navigationEnabled && onSkip != null && skipSupport.forward,
-                    modifier = Modifier.height(48.dp).semantics { contentDescription = "Skip forward 10 seconds" },
-                ) { Text("+10s") }
+            PlaybackKeys(navigationEnabled, onPress, skipSupport, onSkip)
+        }
+    }
+}
+
+/** The keys a kind's face carries: every TV has Back, and Apple TV adds Home. */
+private fun faceKeys(kind: DeviceKind): List<RemoteKey> =
+    if (kind == DeviceKind.AppleTv) listOf(RemoteKey.Back, RemoteKey.Home) else listOf(RemoteKey.Back)
+
+/** Only the pad flexes; the OK key stays at least 48dp and Back/Home keep their gestures. */
+@Composable
+private fun FittedNavigation(
+    modifier: Modifier,
+    kind: DeviceKind,
+    keys: List<RemoteKey>,
+    enabled: Boolean,
+    onPress: (RemoteKey, PressAction) -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Dpad(minOf(maxWidth, maxHeight, 280.dp).coerceAtLeast(168.dp), enabled) { onPress(it, PressAction.Tap) }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            keys.forEach { key ->
+                PillKey(key, Modifier.weight(1f), kind, colors.surface, colors.onSurface, enabled, onPress)
             }
         }
-        // Keep the playback rows' footprint when switching device kind.
-        if (kind == DeviceKind.Lg) Spacer(Modifier.height(108.dp))
+    }
+}
+
+/** Playback and volume keep their own visual group, away from directional navigation. */
+@Composable
+private fun PlaybackKeys(
+    enabled: Boolean,
+    onPress: (RemoteKey, PressAction) -> Unit,
+    skipSupport: CompanionSkipSupport,
+    onSkip: ((Double) -> Unit)?,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    stacked: Boolean = false,
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)) {
+        if (!compact) Text("02 / PLAY & VOLUME", style = MaterialTheme.typography.labelSmall)
+        if (stacked) {
+            PillKey(
+                RemoteKey.PlayPause,
+                Modifier.fillMaxWidth(),
+                DeviceKind.AppleTv,
+                colors.primaryContainer,
+                colors.onPrimaryContainer,
+                enabled,
+                onPress,
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (!stacked) {
+                PillKey(
+                    RemoteKey.PlayPause,
+                    Modifier.weight(1.3f),
+                    DeviceKind.AppleTv,
+                    colors.primaryContainer,
+                    colors.onPrimaryContainer,
+                    enabled,
+                    onPress,
+                )
+            }
+            listOf(RemoteKey.VolumeDown, RemoteKey.VolumeUp).forEach { key ->
+                PillKey(key, Modifier.weight(1f), DeviceKind.AppleTv, colors.surface, colors.onSurface, enabled, onPress)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            TextButton(
+                onClick = { onSkip?.invoke(-10.0) },
+                enabled = enabled && onSkip != null && skipSupport.backward,
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Skip backward 10 seconds" },
+            ) { Text(if (compact) "−10 s" else "−10 seconds") }
+            TextButton(
+                onClick = { onSkip?.invoke(10.0) },
+                enabled = enabled && onSkip != null && skipSupport.forward,
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = "Skip forward 10 seconds" },
+            ) { Text(if (compact) "+10 s" else "+10 seconds") }
+        }
     }
 }
 
@@ -166,7 +244,7 @@ internal fun RemoteKeys(
 @Composable
 private fun PillKey(
     key: RemoteKey,
-    width: Dp,
+    modifier: Modifier,
     kind: DeviceKind,
     face: Color,
     legend: Color,
@@ -177,13 +255,14 @@ private fun PillKey(
         onClick = { onPress(key, PressAction.Tap) },
         onDoubleClick = if (gestures(kind, key)) ({ onPress(key, PressAction.DoubleTap) }) else null,
         onLongClick = if (gestures(kind, key)) ({ onPress(key, PressAction.Hold) }) else null,
-        shape = RoundedCornerShape(50),
+        shape = RoundedCornerShape(18.dp),
         face = face,
         enabled = enabled,
         elevation = 3.dp,
         modifier =
-            Modifier
-                .size(width = width, height = 44.dp)
+            modifier
+                .heightIn(min = 60.dp)
+                .padding(bottom = 4.dp)
                 .then(
                     if (key == RemoteKey.PlayPause) {
                         Modifier.semantics { contentDescription = "Play/Pause" }
@@ -193,14 +272,18 @@ private fun PillKey(
                 ),
     ) {
         if (key == RemoteKey.PlayPause) {
-            PlayPauseGlyph(legend, Modifier.size(width = 30.dp, height = 14.dp))
+            PlayPauseGlyph(
+                if (enabled) legend else MaterialTheme.colorScheme.onSurfaceVariant,
+                Modifier.size(width = 32.dp, height = 18.dp),
+            )
         } else {
             Text(
                 text = key.label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 2.sp,
-                color = legend,
+                letterSpacing = 0.sp,
+                color = if (enabled) legend else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
             )
         }
     }
@@ -210,16 +293,14 @@ private fun PillKey(
 private val RemoteKey.label: String
     get() =
         when (this) {
-            RemoteKey.VolumeDown -> "VOL -"
-            RemoteKey.VolumeUp -> "VOL +"
+            RemoteKey.VolumeDown -> "Vol −"
+            RemoteKey.VolumeUp -> "Vol +"
             else -> name.uppercase(Locale.US)
         }
 
 /**
- * One-piece navigation wheel: a knurled bezel, four arrows printed on the face,
- * and a raised OK key seated in a recessed well. The quarter under a held
- * arrow darkens as if the wheel tilts. Until the target is ready, the whole
- * wheel greys out and refuses input.
+ * A square directional pad with a contrasting OK key. Arrow and OK hit areas never overlap.
+ * Until the device is ready, the whole pad greys out and refuses input.
  */
 @Composable
 internal fun Dpad(
@@ -227,11 +308,12 @@ internal fun Dpad(
     enabled: Boolean,
     onPress: (RemoteKey) -> Unit,
 ) {
-    val okKeySize = diameter * 0.41f
+    val okKeySize = diameter / 3 - 8.dp
     val arrowHitSize = diameter / 3
     val colors = MaterialTheme.colorScheme
-    val face = if (enabled) colors.secondaryContainer else colors.surfaceVariant
-    val glyph = if (enabled) colors.onSecondaryContainer else colors.onSurfaceVariant
+    val face = if (enabled) colors.primary else colors.surfaceVariant
+    val glyph = if (enabled) colors.onPrimary else colors.onSurfaceVariant
+    val shape = RoundedCornerShape(32.dp)
     val interactions = remember { Direction.entries.associateWith { MutableInteractionSource() } }
     val held = Direction.entries.filter { interactions.getValue(it).collectIsPressedAsState().value }
     Box(
@@ -239,9 +321,10 @@ internal fun Dpad(
             Modifier
                 .size(diameter)
                 .alpha(if (enabled) 1f else 0.5f)
-                .shadow(elevation = 10.dp, shape = CircleShape),
+                .clip(shape)
+                .background(face)
+                .border(2.dp, colors.outline, shape),
     ) {
-        DpadFace(face, held, okKeySize, Modifier.matchParentSize())
         Direction.entries.forEach { direction ->
             DialArrow(
                 direction = direction,
@@ -251,13 +334,17 @@ internal fun Dpad(
                 modifier =
                     Modifier
                         .align(direction.alignment)
-                        .size(arrowHitSize),
+                        .size(arrowHitSize)
+                        .background(
+                            if (direction in held) colors.onPrimary.copy(alpha = 0.2f) else Color.Transparent,
+                            RoundedCornerShape(24.dp),
+                        ),
             ) { onPress(direction.key) }
         }
         Key(
             onClick = { onPress(RemoteKey.Select) },
             shape = CircleShape,
-            face = colors.primary,
+            face = colors.secondaryContainer,
             enabled = enabled,
             elevation = 6.dp,
             modifier =
@@ -270,61 +357,9 @@ internal fun Dpad(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
-                color = if (enabled) colors.onPrimary else colors.onSurfaceVariant,
+                color = if (enabled) colors.onSecondaryContainer else colors.onSurfaceVariant,
             )
         }
-    }
-}
-
-/** Bezel knurling, dial face, held-arrow shading and the recessed OK well. */
-@Composable
-private fun DpadFace(
-    face: Color,
-    held: List<Direction>,
-    okKeySize: Dp,
-    modifier: Modifier,
-) {
-    Canvas(modifier) {
-        val r = size.minDimension / 2
-        // Bezel with knurling around the rim.
-        drawCircle(Brush.verticalGradient(listOf(face.tint(0.2f), face.shade(0.25f))), r)
-        val ticks = 96
-        val outer = r - 2.dp.toPx()
-        val inner = r - 8.dp.toPx()
-        repeat(ticks) { i ->
-            val a = (2 * PI * i / ticks).toFloat()
-            val dir = Offset(cos(a), sin(a))
-            drawLine(
-                Color.Black.copy(alpha = 0.16f),
-                center + dir * inner,
-                center + dir * outer,
-                strokeWidth = 1.2.dp.toPx(),
-            )
-        }
-        // Face.
-        val faceR = r - 11.dp.toPx()
-        drawCircle(Brush.verticalGradient(listOf(face.tint(0.1f), face.shade(0.06f))), faceR)
-        held.forEach {
-            drawArc(
-                color = Color.Black.copy(alpha = 0.1f),
-                startAngle = it.wedgeStart,
-                sweepAngle = 90f,
-                useCenter = true,
-                topLeft = center - Offset(faceR, faceR),
-                size = Size(faceR * 2, faceR * 2),
-            )
-        }
-        drawCircle(Color.Black.copy(alpha = 0.22f), faceR, style = Stroke(1.dp.toPx()))
-        // Recessed well: dark at the top, lit at the bottom lip.
-        val wellR = okKeySize.toPx() / 2 + 9.dp.toPx()
-        drawCircle(
-            Brush.verticalGradient(
-                listOf(face.shade(0.25f), face.tint(0.12f)),
-                startY = center.y - wellR,
-                endY = center.y + wellR,
-            ),
-            wellR,
-        )
     }
 }
 
@@ -372,8 +407,8 @@ internal fun DialArrow(
 }
 
 /**
- * Raised key cap: lit-from-above gradient face, bevelled rim, drop shadow.
- * While held the gradient flips so the cap reads as pushed in. A double-tap
+ * Flat key cap with an ink outline and a hard offset shadow.
+ * While held the cap sinks toward its shadow. A double-tap
  * handler delays single taps until the double-tap window passes.
  */
 @Composable
@@ -416,7 +451,7 @@ internal fun Key(
     )
 }
 
-/** Cap chrome: press animation, lit gradient face, bevelled rim, tap gestures. */
+/** Cap chrome: press animation, flat face, ink outline and tap gestures. */
 @Composable
 private fun KeySurface(
     onClick: () -> Unit,
@@ -434,30 +469,22 @@ private fun KeySurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val view = LocalView.current
+    val ink = MaterialTheme.colorScheme.outline
     Box(
         modifier =
             modifier
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
-                }.shadow(elevation = lift, shape = shape)
-                .clip(shape)
-                .background(
-                    Brush.verticalGradient(
-                        if (down) {
-                            listOf(cap.shade(0.12f), cap.tint(0.04f))
-                        } else {
-                            listOf(cap.tint(0.16f), cap.shade(0.08f))
-                        },
-                    ),
-                ).border(
-                    width = 1.dp,
-                    brush =
-                        Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = if (down) 0.05f else 0.3f), Color.Black.copy(alpha = 0.28f)),
-                        ),
-                    shape = shape,
-                ).combinedClickable(
+                }.drawBehind {
+                    val outline = shape.createOutline(size, layoutDirection, this)
+                    translate(left = lift.toPx(), top = lift.toPx()) {
+                        drawOutline(outline, ink)
+                    }
+                }.clip(shape)
+                .background(if (down) cap.shade(0.08f) else cap)
+                .border(2.dp, ink, shape)
+                .combinedClickable(
                     interactionSource = interaction,
                     indication = null,
                     enabled = enabled,

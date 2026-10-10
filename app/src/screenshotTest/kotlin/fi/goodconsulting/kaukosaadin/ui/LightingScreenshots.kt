@@ -59,7 +59,7 @@ private val noActions = LightingActions({}, {}, {}, {}, { _, _ -> }, {})
 @Composable
 private fun LightingFrame(colors: ColorScheme) {
     val bridge = SavedDevice("preview-hue", DeviceKind.Hue, "Living room Hue Bridge", "192.0.2.12")
-    MaterialTheme(colorScheme = colors) {
+    MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes) {
         BridgeShell(
             remote =
                 RemoteActions(

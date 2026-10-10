@@ -27,7 +27,8 @@ adb shell am start -n fi.goodconsulting.kaukosaadin/.MainActivity
 
 ### Adding devices
 
-Fresh installs show **No devices added**. Tap **Find devices** to open **Add a device**, which
+Fresh installs show **Your home, one remote**. Tap **Find devices** to open **Add a device** (headed
+**Let's find your devices**), which
 scans your Wi-Fi for LG TVs, Apple TVs and Hue Bridges at once and lists them together as they
 answer; devices you already saved are marked **Added**. If yours doesn't show up, **Can't find your
 device?** adds an LG TV or Hue Bridge by its IP address. Tap a device and a sheet walks you through
@@ -96,7 +97,7 @@ app and are remembered across restarts.
 
 - **Theme**: **Classic** (the original palette, following system light/dark mode) or
   **Hacker man** (a green-on-black demo theme).
-- **Layout**: **Standard** (the full casing, wheel and VFD display), **Debug** (flat panels
+- **Layout**: **Standard** (a bold directional pad and grouped playback controls), **Debug** (flat panels
   with a live timestamped status log, for development and troubleshooting) or **Super remote**
   (one saved Apple TV's app shortcuts and controls with one saved room's or zone's lighting on
   one screen).

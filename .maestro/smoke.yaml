@@ -11,7 +11,7 @@ tags:
 - assertNotVisible: "SOURCE"
 - runFlow:
     when:
-      visible: "No devices added"
+      visible: "Your home, one remote"
     commands:
       - assertNotVisible: "OK"
       - assertNotVisible: "Wake TV"
@@ -19,7 +19,7 @@ tags:
 # An LG TV is never connected at launch, so its keys start disabled.
 - runFlow:
     when:
-      visible: "WEBOS"
+      visible: "LG TV"
     commands:
       - assertVisible:
           enabled: false
@@ -36,10 +36,10 @@ tags:
     when:
       visible: "Device settings"
     commands:
-      - assertVisible: "(WEBOS|TVOS)"
-      - tapOn: ".*▾"
+      - assertVisible: "Choose device"
+      - tapOn: "Choose device"
       - tapOn: "Add a device"
-- assertVisible: "Add a device"
+- assertVisible: "Let's find your devices"
 - scrollUntilVisible:
     element:
       text: "Can't find your device\\?"
@@ -52,7 +52,7 @@ tags:
 - tapOn: "Close"
 - runFlow:
     when:
-      visible: "No devices added"
+      visible: "Your home, one remote"
     commands:
       - assertVisible: "Find devices"
       - assertNotVisible: "OK"
@@ -60,4 +60,4 @@ tags:
     when:
       visible: "Device settings"
     commands:
-      - assertVisible: "(WEBOS|TVOS)"
+      - assertVisible: "Choose device"

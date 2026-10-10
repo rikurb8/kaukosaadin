@@ -8,7 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -84,7 +89,7 @@ fun KaukosaadinApp() {
         settingsFrom = from
         screen = Screen.DeviceSettings
     }
-    MaterialTheme(colorScheme = colors) {
+    MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
@@ -226,18 +231,24 @@ internal fun EmptyRemoteScreen(
     onGeneralSettings: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().padding(contentPadding).padding(24.dp),
+        Modifier
+            .fillMaxSize()
+            .padding(contentPadding)
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
         EngravedLabel("KAUKOSÄÄDIN")
-        Text("No devices added", style = MaterialTheme.typography.headlineSmall)
+        DeviceIllustration(Modifier.height(180.dp))
+        Text("Your home, one remote", style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
         Text(
-            "Find the TVs, Apple TVs and Hue Bridges on your Wi-Fi to start using the remote.",
-            style = MaterialTheme.typography.bodyMedium,
+            "Connect your LG TV, Apple TV or Hue Bridge.\nSame Wi-Fi. No cloud account.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Button(onClick = onFindDevices) { Text("Find devices") }
+        Button(onClick = onFindDevices, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Find devices") }
         TextButton(onClick = onGeneralSettings) { Text("General settings") }
     }
 }

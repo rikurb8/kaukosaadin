@@ -182,8 +182,8 @@ internal fun PressLinkButton(
     }
     PairingStep(
         DeviceKind.Hue,
-        "Press the button on your bridge",
-        message = "Press the round link button on top of $name. This finishes by itself once the bridge sees it.",
+        "One press and you're in",
+        message = "Press the round link button on top of $name. We'll finish connecting automatically.",
         secondary = cancel,
     ) {
         LinearProgressIndicator(

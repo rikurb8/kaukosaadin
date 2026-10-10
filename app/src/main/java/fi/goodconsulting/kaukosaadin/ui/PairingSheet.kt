@@ -4,12 +4,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
@@ -26,7 +29,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -60,7 +62,7 @@ internal class StepAction(
 )
 
 /**
- * One pairing step, laid out the same for every kind: the kind's glyph and a short [title], one
+ * One pairing step, laid out the same for every kind: a hardware sketch and a short [title], one
  * plain [message], the step's own [content], an indeterminate bar while [busy], an inline [error]
  * and up to two buttons.
  */
@@ -79,19 +81,20 @@ internal fun PairingStep(
         Modifier
             .fillMaxWidth()
             .imePadding()
+            .verticalScroll(rememberScrollState())
             .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            KindGlyph(kind)
-            Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+        DeviceIllustration(Modifier.height(112.dp), kind = kind)
+        Text(title, style = MaterialTheme.typography.headlineSmall)
+        message?.let {
+            Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        message?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
         content()
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
         primary?.let {
-            Button(onClick = it.onClick, enabled = it.enabled, modifier = Modifier.fillMaxWidth()) { Text(it.label) }
+            Button(onClick = it.onClick, enabled = it.enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(it.label) }
         }
         secondary?.let {
             TextButton(onClick = it.onClick, enabled = it.enabled, modifier = Modifier.fillMaxWidth()) { Text(it.label) }

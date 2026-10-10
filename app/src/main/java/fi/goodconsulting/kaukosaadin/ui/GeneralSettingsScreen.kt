@@ -34,7 +34,7 @@ internal enum class AppTheme(
     val label: String,
     val description: String,
 ) {
-    Classic("classic", "Classic", "Cream and charcoal with an orange accent. Follows system light/dark mode."),
+    Classic("classic", "Classic", "Paper, violet, lime and pink. Follows system light/dark mode."),
     HackerMan("hacker_man", "Hacker man", "Demo theme: phosphor green on black. Always dark."),
     ;
 
@@ -49,7 +49,7 @@ internal enum class AppLayout(
     val label: String,
     val description: String,
 ) {
-    Standard("standard", "Standard", "The remote as designed: full casing, wheel and VFD display."),
+    Standard("standard", "Standard", "A bold control panel with a directional pad and separate playback controls."),
     Debug("debug", "Debug", "Flat panels with a live status log, for development and troubleshooting."),
     SuperRemote(
         "super_remote",

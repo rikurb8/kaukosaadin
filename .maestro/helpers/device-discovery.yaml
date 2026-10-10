@@ -6,16 +6,16 @@ appId: fi.goodconsulting.kaukosaadin
     clearState: false
 - runFlow:
     when:
-      visible: "No devices added"
+      visible: "Your home, one remote"
     commands:
       - tapOn: "Find devices"
 - runFlow:
     when:
       visible: "Device settings"
     commands:
-      - tapOn: ".*▾"
+      - tapOn: "Choose device"
       - tapOn: "Add a device"
-- assertVisible: "Add a device"
+- assertVisible: "Let's find your devices"
 - extendedWaitUntil:
     visible: "Scan again"
     timeout: 20000

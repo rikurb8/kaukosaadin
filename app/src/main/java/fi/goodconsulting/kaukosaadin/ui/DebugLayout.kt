@@ -28,8 +28,8 @@ import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 
 /**
- * Developer layout: flat panels and a live status log instead of the decorative
- * casing. Drives the same keys and commands as the standard layout.
+ * Developer layout: flat panels and a live status log instead of the standard
+ * device header. Drives the same keys and commands as the standard layout.
  */
 @Composable
 internal fun DebugRemoteScreen(

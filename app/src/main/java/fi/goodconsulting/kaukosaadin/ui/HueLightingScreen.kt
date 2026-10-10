@@ -54,7 +54,7 @@ private const val UNPAIRED_BRIDGE =
     "This bridge is not paired on this phone. Forget it and add it again to store an app key."
 
 /**
- * The Hue bridge's lighting screen: the same casing, picker, VFD panel and toolbar as a TV remote,
+ * The Hue bridge's lighting screen: the same device header, status and toolbar as a TV remote,
  * with one card per room and zone where the keypad would be, so selecting a bridge moves the controls
  * rather than the chrome. The bridge is already a saved device, so it opens its own screen instead of
  * adding bulbs to the picker, and nothing here touches the TV remote's keys. [lighting] is null while
@@ -120,9 +120,8 @@ internal fun LightingScreen(
 }
 
 /**
- * The bridge's remote in the shared casing: the picker, deck, VFD readout and toolbar sit where a
- * TV's do, with the lighting list where the keypad would be. No power key (a bridge is switched at
- * the wall) and no fitting, so a long list of rooms keeps its text size and scrolls.
+ * The bridge uses the shared header with a lighting list instead of a keypad.
+ * No power key (a bridge is switched at the wall); rooms keep their text size and scroll.
  */
 @Composable
 internal fun BridgeShell(
@@ -141,7 +140,6 @@ internal fun BridgeShell(
         busy = false,
         status = status,
         txFlash = txFlash,
-        deck = { BridgeDeck(txFlash) },
         onSelect = remote.onSelect,
         onAddDevice = remote.onAddDevice,
         onDevices = remote.onDevices,
@@ -149,12 +147,11 @@ internal fun BridgeShell(
         onApps = null,
         onSettings = remote.onSettings,
         onGeneralSettings = remote.onGeneralSettings,
-        fitHeight = false,
         body = { body() },
     )
 }
 
-/** The VFD panel's status line: the link first, then how much of the house is lit. */
+/** The bridge's diagnostic status: the link first, then how much of the house is lit. */
 private fun panelStatus(
     connection: HueConnectionState,
     state: LightingState,

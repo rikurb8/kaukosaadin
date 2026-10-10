@@ -1,47 +1,74 @@
 package fi.goodconsulting.kaukosaadin.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 
-/**
- * Braun-dieter-rams palette: cream casing, charcoal keys, one orange accent.
- * Keys and cards borrow their colors from `secondaryContainer`/`surface`.
- */
+/** Paper, ink and punchy color blocks; shared by setup, settings and remote controls. */
 internal val LightColors =
     lightColorScheme(
-        background = Color(0xFFE9E2D0),
-        onBackground = Color(0xFF2A261D),
-        surface = Color(0xFFF5F0E1),
-        onSurface = Color(0xFF2A261D),
-        surfaceVariant = Color(0xFFD8D0BB),
-        onSurfaceVariant = Color(0xFF6E6753),
-        outline = Color(0xFFB9AE93),
-        tertiary = Color(0xFFFFB84D),
-        primary = Color(0xFFE3600F),
-        onPrimary = Color(0xFFFFF7EC),
-        primaryContainer = Color(0xFFF7DFC8),
-        onPrimaryContainer = Color(0xFF4A2000),
-        secondaryContainer = Color(0xFFDCD3BD),
-        onSecondaryContainer = Color(0xFF332E22),
+        background = Color(0xFFFFF8ED),
+        onBackground = Color(0xFF201C29),
+        surface = Color(0xFFFFFDF7),
+        onSurface = Color(0xFF201C29),
+        surfaceVariant = Color(0xFFE8E1F0),
+        onSurfaceVariant = Color(0xFF60586B),
+        outline = Color(0xFF30263E),
+        tertiary = Color(0xFFD9F45B),
+        onTertiary = Color(0xFF242B0E),
+        tertiaryContainer = Color(0xFFD9F45B),
+        onTertiaryContainer = Color(0xFF242B0E),
+        primary = Color(0xFF6236D9),
+        onPrimary = Color(0xFFFFFFFF),
+        primaryContainer = Color(0xFFFFC9E5),
+        onPrimaryContainer = Color(0xFF422034),
+        secondaryContainer = Color(0xFFD9F45B),
+        onSecondaryContainer = Color(0xFF242B0E),
     )
 
 internal val DarkColors =
     darkColorScheme(
-        background = Color(0xFF1C1914),
-        onBackground = Color(0xFFEDE6D6),
-        surface = Color(0xFF262219),
-        onSurface = Color(0xFFEDE6D6),
-        surfaceVariant = Color(0xFF322C21),
-        onSurfaceVariant = Color(0xFFA39A84),
-        outline = Color(0xFF4E463A),
-        tertiary = Color(0xFFFFB84D),
-        primary = Color(0xFFFF8A3D),
-        onPrimary = Color(0xFF331300),
-        primaryContainer = Color(0xFF4A2A12),
-        onPrimaryContainer = Color(0xFFFFC08F),
-        secondaryContainer = Color(0xFF4A4232),
-        onSecondaryContainer = Color(0xFFE4DCC6),
+        background = Color(0xFF191620),
+        onBackground = Color(0xFFFFF8ED),
+        surface = Color(0xFF25202F),
+        onSurface = Color(0xFFFFF8ED),
+        surfaceVariant = Color(0xFF393143),
+        onSurfaceVariant = Color(0xFFC8BED3),
+        outline = Color(0xFFB8A9CA),
+        tertiary = Color(0xFFD9F45B),
+        onTertiary = Color(0xFF242B0E),
+        tertiaryContainer = Color(0xFF394519),
+        onTertiaryContainer = Color(0xFFD9F45B),
+        primary = Color(0xFFC6ADFF),
+        onPrimary = Color(0xFF28114D),
+        primaryContainer = Color(0xFF553149),
+        onPrimaryContainer = Color(0xFFFFD8ED),
+        secondaryContainer = Color(0xFFCDE85B),
+        onSecondaryContainer = Color(0xFF242B0E),
+    )
+
+internal val AppShapes =
+    Shapes(
+        small = RoundedCornerShape(8.dp),
+        medium = RoundedCornerShape(12.dp),
+        large = RoundedCornerShape(16.dp),
+        extraLarge = RoundedCornerShape(20.dp),
+    )
+
+private val BaseTypography = Typography()
+internal val AppTypography =
+    Typography(
+        headlineLarge = BaseTypography.headlineLarge.copy(fontWeight = FontWeight.Black),
+        headlineMedium = BaseTypography.headlineMedium.copy(fontWeight = FontWeight.Black),
+        headlineSmall = BaseTypography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+        titleLarge = BaseTypography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+        titleMedium = BaseTypography.titleMedium.copy(fontWeight = FontWeight.Bold),
+        labelLarge = BaseTypography.labelLarge.copy(fontWeight = FontWeight.Bold),
     )
 
 internal val HackerManColors =
