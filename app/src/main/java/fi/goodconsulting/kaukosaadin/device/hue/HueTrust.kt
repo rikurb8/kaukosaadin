@@ -25,11 +25,10 @@ internal object HuePin {
 /**
  * Verifies the leaf certificate of one Hue Bridge.
  *
- * The chain is first offered to the platform trust manager, so a bridge serving a properly CA-signed
- * certificate verifies as ordinary HTTPS and needs no pin. Only when that rejects the chain — the
- * bridge's self-signed case — does this fall back to a trust-on-first-use SPKI pin: [recordTrust]
- * persists the presented public key on the first connection to the bridge the operator chose, and
- * every later connection must present the same key.
+ * An existing pin always identifies the bridge, even when the platform accepts its chain. Without
+ * a pin, a properly CA-signed certificate verifies as ordinary HTTPS. If the platform rejects the
+ * chain, [recordTrust] persists the presented public key on first use; every later connection must
+ * present the same key.
  *
  * RESIDUAL RISK: trust-on-first-use accepts whatever certificate the bridge presents during that one
  * pairing window, so an active attacker already on the LAN at that moment can substitute their own
@@ -53,16 +52,15 @@ internal class HueTrustManager(
         authType: String,
     ) {
         if (chain.isEmpty()) throw CertificateException("The bridge presented no certificate.")
-        if (acceptedBySystem(chain, authType)) return
-        val presented = HuePin.spkiSha256(chain[0])
         val pinned = storedPin()
-        if (pinned.isNullOrBlank()) {
-            recordTrust(presented)
+        if (!pinned.isNullOrBlank()) {
+            if (!HuePin.matches(pinned, chain[0])) {
+                throw CertificateException("The bridge's certificate changed. Forget and pair it again to re-trust it.")
+            }
             return
         }
-        if (!pinned.equals(presented, ignoreCase = true)) {
-            throw CertificateException("The bridge's certificate changed. Forget and pair it again to re-trust it.")
-        }
+        if (acceptedBySystem(chain, authType)) return
+        recordTrust(HuePin.spkiSha256(chain[0]))
     }
 
     private fun acceptedBySystem(

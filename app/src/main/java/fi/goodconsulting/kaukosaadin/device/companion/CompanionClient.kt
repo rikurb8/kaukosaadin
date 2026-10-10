@@ -168,8 +168,10 @@ class CompanionClient(
         mutableSkipSupport.value = CompanionSkipSupport()
     }
 
-    private fun session(): CompanionLink {
-        link?.let { return it }
+    private fun session(): CompanionLink = companionSession(link, ::openSession)
+
+    private fun openSession(): CompanionLink {
+        closeSession()
         val host = prefs.getString("host", null)
         val credentials = (if (host == null) null else readCredentials()) ?: error("Pair with the Apple TV first.")
         try {
@@ -374,3 +376,9 @@ class CompanionClient(
         private const val PAIRING_TIMEOUT_MS = 90_000L
     }
 }
+
+/** The reuse decision is independent of Android credentials, so it can be checked with real links. */
+internal fun companionSession(
+    current: CompanionLink?,
+    open: () -> CompanionLink,
+): CompanionLink = current?.takeUnless { it.closed } ?: open()

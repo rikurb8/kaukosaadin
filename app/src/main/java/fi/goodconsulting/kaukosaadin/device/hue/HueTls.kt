@@ -16,8 +16,8 @@ import javax.net.ssl.X509TrustManager
  * The verified HTTPS transport for one bridge. It is the seam ticket #8 builds its API client on:
  * [configure] returns an OkHttp builder that trusts [host] and speaks HTTPS only.
  *
- * There is no trust-all path. The platform trust manager runs first; only its rejection of the
- * bridge's self-signed certificate reaches the trust-on-first-use pin in [HueTrustManager].
+ * There is no trust-all path. [HueTrustManager] always enforces an existing pin. Without a pin,
+ * platform trust runs first; only its rejection reaches trust-on-first-use pinning.
  */
 internal class HueTls(
     private val credentials: HueCredentials,
@@ -43,10 +43,9 @@ internal class HueTls(
     }
 
     /**
-     * A CA-signed bridge certificate must also match the address, so ordinary HTTPS verification
-     * applies. A self-signed bridge on a LAN address carries no matching SAN, and there the stored
-     * SPKI pin — already enforced by [HueTrustManager] — is the identity. The default verifier is
-     * still consulted first, so no certificate is accepted whose hostname does not check out.
+     * An unpinned CA-signed bridge certificate must also match the address. For a pinned bridge,
+     * the stored SPKI pin — already enforced by [HueTrustManager] — is the identity when the
+     * certificate has no matching SAN. A connection needs either a matching hostname or pin.
      */
     private fun hostnameVerifier(credentials: HueCredentials): HostnameVerifier =
         HostnameVerifier { host, session ->

@@ -496,6 +496,36 @@ class LightingControllerTest {
             assertEquals(40.0, state.lights.single().brightness)
         }
 
+    @Test fun updatesDuringTheInitialReadsAreAppliedBeforeTheNextToggle() =
+        runBlocking {
+            val fake =
+                FakeHueLighting(
+                    lightsResult = { HueResult.Ok(listOf(KITCHEN)) },
+                    groupedLightsResult = { HueResult.Ok(listOf(KITCHEN_GROUP)) },
+                )
+            fake.roomsResult = {
+                fake.emit(HueEvent(KITCHEN.id, "light", on = true, brightness = 61.0))
+                fake.emit(HueEvent(KITCHEN_GROUP.id, "grouped_light", on = false, brightness = 20.0))
+                HueResult.Ok(listOf(KITCHEN_ROOM))
+            }
+            val controller = lightingController(fake)
+            val visible = launch { controller.live() }
+            try {
+                withTimeout(TIMEOUT_MS) { fake.listeners.first { it > 0 } }
+                yield()
+                val state = controller.state.value
+                assertTrue(state.lights.single().on)
+                assertEquals(61.0, state.lights.single().brightness!!, 0.0)
+                assertFalse(state.groupedLights.single().on)
+                assertEquals(20.0, state.groupedLights.single().brightness!!, 0.0)
+
+                controller.toggle(KITCHEN)
+                assertEquals(listOf(HueCommandTarget.Light(KITCHEN.id) to false), fake.commands)
+            } finally {
+                visible.cancelAndJoin()
+            }
+        }
+
     @Test fun anEventUpdatesALightsOnOffAndBrightness() =
         runBlocking {
             val fake = FakeHueLighting(lightsResult = { HueResult.Ok(listOf(KITCHEN, HALL_LAMP)) })

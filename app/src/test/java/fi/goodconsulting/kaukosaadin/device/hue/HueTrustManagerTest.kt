@@ -61,6 +61,18 @@ class HueTrustManagerTest {
         assertThrows(CertificateException::class.java) { trust.checkServerTrusted(arrayOf(certificate), "ECDSA") }
     }
 
+    @Test fun aSystemTrustedChainCannotBypassAnExistingPin() {
+        val trust = HueTrustManager(AcceptingSystemTrust, storedPin = { "00".repeat(32) }, recordTrust = {})
+        assertThrows(CertificateException::class.java) { trust.checkServerTrusted(arrayOf(certificate), "ECDSA") }
+    }
+
+    @Test fun aSystemTrustedChainWithTheMatchingPinKeepsThePin() {
+        val recorded = mutableListOf<String>()
+        val trust = HueTrustManager(AcceptingSystemTrust, storedPin = { EXPECTED_PIN }, recordTrust = { recorded += it })
+        trust.checkServerTrusted(arrayOf(certificate), "ECDSA")
+        assertTrue(recorded.isEmpty())
+    }
+
     @Test fun anEmptyChainIsAlwaysRejected() {
         assertThrows(CertificateException::class.java) {
             HueTrustManager(AcceptingSystemTrust, storedPin = { null }, recordTrust = {}).checkServerTrusted(emptyArray(), "ECDSA")

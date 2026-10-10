@@ -153,8 +153,9 @@ seam and how to add a kind. There is no DI framework and no multi-module setup.
   Android 16's optional `RESTRICT_LOCAL_NETWORK` developer flag is not enabled by this app.
 - `CHANGE_WIFI_MULTICAST_STATE` allows a Wi-Fi multicast lock during the bounded SSDP scan.
 - LG uses TLS with an explicitly approved certificate pin. A Hue Bridge uses verified TLS
-  too: the system CA store first, then a trust-on-first-use SPKI pin for a self-signed bridge.
-  No cleartext exception, trust-all connection, or silent security downgrade.
+  too: an existing pin is enforced on every connection. Without a pin, the system CA store runs
+  first, then trust-on-first-use SPKI pinning for a self-signed bridge. No cleartext exception,
+  trust-all connection, or silent security downgrade.
 
 ## Prerequisites
 

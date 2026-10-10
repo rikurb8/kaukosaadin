@@ -163,18 +163,19 @@ internal class HueApi(
                     .build()
             // Exactly one execute() call: a failure is reported once and dropped.
             val response = executor.execute(request)
-            val refused =
-                response.status !in HTTP_OK..HTTP_SUCCESS_MAX ||
-                    HueEnvelope.parse(response.body)?.errorTypes?.isNotEmpty() == true
-            if (refused) HueResult.Failure(HueErrors.message(response.status, response.body)) else HueResult.Ok(Unit)
+            if (response.status !in HTTP_OK..HTTP_SUCCESS_MAX) {
+                HueResult.Failure(HueErrors.message(response.status, response.body))
+            } else {
+                decodeEnvelope(response.body) { Unit }
+            }
         }
 
     private fun <T> decodeEnvelope(
         body: String,
-        decode: (HueEnvelope) -> List<T>,
-    ): HueResult<List<T>> {
+        decode: (HueEnvelope) -> T,
+    ): HueResult<T> {
         val envelope = HueEnvelope.parse(body) ?: return HueResult.Failure(HueErrors.UNREADABLE)
-        return if (envelope.errorTypes.isEmpty()) {
+        return if (!envelope.hasErrors) {
             HueResult.Ok(decode(envelope))
         } else {
             HueResult.Failure(HueErrors.message(HTTP_OK, body))

@@ -14,6 +14,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
@@ -103,9 +104,12 @@ internal class LightingController(
      */
     suspend fun live() {
         try {
-            lighting.connect()
-            load()
-            lighting.events.collect { event -> mutableState.update { it.updatedBy(event) } }
+            // Register first: the shared flow retains updates while the initial snapshot is read.
+            lighting.events
+                .onSubscription {
+                    lighting.connect()
+                    load()
+                }.collect { event -> mutableState.update { it.updatedBy(event) } }
         } finally {
             withContext(NonCancellable) { lighting.disconnect() }
         }

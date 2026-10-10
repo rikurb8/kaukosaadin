@@ -41,15 +41,22 @@ internal data class HueGroup(
 /** The v2 response envelope: `{"errors":[{"description","type"}],"data":[...]}`. */
 internal class HueEnvelope(
     val data: JSONArray,
-    /** The numeric error types the envelope carries; empty on success. The description is not kept. */
+    /** Any nonempty errors array is a refusal, even when its entries carry no numeric type. */
+    val hasErrors: Boolean,
+    /** The numeric error types the envelope carries; empty when none are provided. The description is not kept. */
     val errorTypes: List<Int>,
 ) {
     companion object {
-        /** Parses [body] as a v2 envelope; null when it is not a JSON object at all. */
+        /** Parses [body] as a v2 envelope; null when its required errors array or optional data array is unreadable. */
         fun parse(body: String): HueEnvelope? =
             try {
                 val json = JSONObject(body)
-                HueEnvelope(data = json.optJSONArray("data") ?: JSONArray(), errorTypes = errorTypes(json.optJSONArray("errors")))
+                val errors = json.getJSONArray("errors")
+                HueEnvelope(
+                    data = if (json.has("data")) json.getJSONArray("data") else JSONArray(),
+                    hasErrors = errors.length() > 0,
+                    errorTypes = errorTypes(errors),
+                )
             } catch (_: JSONException) {
                 null
             }

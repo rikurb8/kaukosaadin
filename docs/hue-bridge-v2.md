@@ -67,11 +67,11 @@ hostname-verifier risk (TLS-3) and the trust-on-first-use window (TLS-4).
 
 ## TLS and trust
 
-The app has no trust-all path. `HueTls` offers the bridge's chain to the platform trust manager
-first and only falls back to a stored SPKI pin when that rejects it, so a bridge with a
-CA-signed certificate is verified as ordinary HTTPS and a self-signed bridge is
-trust-on-first-use pinned. The default hostname verifier is still consulted first in both
-cases.
+The app has no trust-all path. `HueTls` enforces an existing SPKI pin before platform trust,
+so even a system-trusted replacement certificate must present the pinned key. Without a pin,
+the chain is offered to the platform trust manager first: a CA-signed certificate verifies as
+ordinary HTTPS, and a rejected chain is trust-on-first-use pinned. The hostname check accepts
+either the address matching the certificate or the stored pin matching its public key.
 
 - **TLS-1 — read the presented certificate.** From a machine on the same LAN:
   ```bash
@@ -90,13 +90,13 @@ cases.
   A failure here with a CA-signed certificate means the SAN does not cover the bridge's IP.
   This is item 2.
 - **TLS-3 — the hostname-verifier risk (ticket #13).** The app consults the default verifier
-  first, then the stored pin. On the CA-signed path **no pin is ever stored**. So if the
+  first, then the stored pin. On an initially CA-signed path **no pin is stored**. So if the
   certificate has no `iPAddress` SAN matching the bridge's IP, the app is expected to **reject**
   the connection even though curl might accept the same certificate over a hostname. On the
   real bridge, record which path it takes and, if it is rejected, the exact on-screen message
   (expected: the "certificate changed or was rejected … Forget and pair again" text) and
-  whether Device settings still shows "Certificate: pinned to the paired bridge" (a CA-signed
-  acceptance never stores a pin). This decides whether the
+  whether Device settings still shows "Certificate: pinned to the paired bridge" (an initially
+  CA-signed acceptance stores no pin; an existing pin is retained). This decides whether the
   integration works at all on current firmware.
 - **TLS-4 — trust-on-first-use window.** The pin is captured at first pairing. An active
   attacker on the LAN during that one window could substitute their key; every later connection

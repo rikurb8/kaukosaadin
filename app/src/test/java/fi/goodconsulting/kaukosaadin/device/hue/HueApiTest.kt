@@ -146,6 +146,32 @@ class HueApiTest {
             assertEquals(1, executor.requests.size)
         }
 
+    @Test fun unreadableCommandRepliesFailWithoutReplayingTheCommand() =
+        runBlocking {
+            for (body in listOf("not json", "{}", """{"errors":null}""", """{"errors":[],"data":"invalid"}""")) {
+                val executor = FakeExecutor { HueHttpResponse(200, body) }
+                val result = HueApi(HOST, KEY, executor).setOn(HueCommandTarget.Light("light-1"), on = true)
+
+                assertEquals(body, HueResult.Failure(HueErrors.UNREADABLE), result)
+                assertEquals(1, executor.requests.size)
+            }
+        }
+
+    @Test fun errorsWithoutNumericTypesFailReadsAndEveryCommand() =
+        runBlocking {
+            val body = """{"errors":[{"description":"peer text must not be shown"}],"data":[]}"""
+            val executor = FakeExecutor { HueHttpResponse(200, body) }
+            val api = HueApi(HOST, KEY, executor)
+            val target = HueCommandTarget.Light("light-1")
+            val failure = HueResult.Failure("The bridge refused the request (200).")
+
+            assertEquals(failure, api.lights())
+            assertEquals(failure, api.setOn(target, on = true))
+            assertEquals(failure, api.setBrightness(target, 40))
+            assertEquals(failure, api.setOnWithBrightness(target, 20))
+            assertEquals(4, executor.requests.size)
+        }
+
     @Test fun eachPressSendsItsOwnCommandAndNothingElse() =
         runBlocking {
             val executor = FakeExecutor { HueHttpResponse(200, EMPTY_ENVELOPE) }
