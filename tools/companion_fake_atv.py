@@ -111,6 +111,17 @@ class ReportingService(FakeCompanionService):
         super().handle__launchapp(message)
         report(f"LAUNCH {self.state.active_app or self.state.open_url}")
 
+    def handle__mcc(self, message):
+        assert message["_c"]["_mcc"] == 7
+        seconds = message["_c"]["_skpS"]
+        assert isinstance(seconds, float)
+        if getattr(self.state, "reject_skip", False):
+            self.send_error(message, "Synthetic rejection")
+            report("SKIP_REJECTED")
+            return
+        super().handle__mcc(message)
+        report(f"SKIP {seconds}")
+
 
 async def read_commands(usecases):
     """Drive focus changes from stdin so the test can exercise the pushed RTI events."""
@@ -120,7 +131,16 @@ async def read_commands(usecases):
         if not line:
             return
         command = line.strip()
-        if command == "focus on":
+        if command.startswith("skip flags "):
+            flags = int(command.removeprefix("skip flags "))
+            usecases.set_control_flags(flags)
+            for client in usecases.state.clients:
+                client.send_event("_iMC", 1234, {"_mcF": flags})
+            report(f"SKIP_FLAGS {flags}")
+        elif command == "skip reject":
+            usecases.state.reject_skip = True
+            report("REJECT_SKIP")
+        elif command == "focus on":
             usecases.set_rti_focus_state(KeyboardFocusState.Focused)
             report("FOCUS on")
         elif command == "focus off":
@@ -131,6 +151,7 @@ async def read_commands(usecases):
 async def main():
     state = FakeCompanionState()
     usecases = FakeCompanionUseCases(state)
+    usecases.set_control_flags(0x0600)
     # Fixed, synthetic bundle ids: what a real Apple TV would report is its own business.
     usecases.set_installed_apps({
         "com.netflix.Netflix": "Netflix",

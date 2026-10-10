@@ -193,6 +193,7 @@ private fun AppleTvRemote(
     val paired by session.paired.collectAsState()
     val busy by session.busy.collectAsState()
     val connecting by session.connecting.collectAsState()
+    val skipSupport by client.skipSupport.collectAsState()
     RemoteScreen(
         contentPadding = padding,
         devices = remote.devices,
@@ -211,6 +212,8 @@ private fun AppleTvRemote(
         onGeneralSettings = remote.onGeneralSettings,
         onPower = { session.run { client.sleep() } },
         onKey = { key, action -> session.run { client.press(key.hid, action) } },
+        skipSupport = skipSupport,
+        onSkip = { seconds -> session.run { client.skip(seconds) } },
     )
 }
 

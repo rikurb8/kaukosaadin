@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.time.LocalTime
 import java.util.Locale
@@ -83,6 +84,8 @@ internal fun RemoteScreen(
     onPower: () -> Unit,
     onKey: (RemoteKey, PressAction) -> Unit,
     modifier: Modifier = Modifier,
+    skipSupport: CompanionSkipSupport = CompanionSkipSupport(),
+    onSkip: ((Double) -> Unit)? = null,
 ) {
     var txCount by remember { mutableIntStateOf(0) }
     val navigationEnabled = ready && !busy
@@ -94,6 +97,14 @@ internal fun RemoteScreen(
         txCount++
         onKey(key, action)
     }
+
+    val skip: ((Double) -> Unit)? =
+        onSkip?.let { send ->
+            { seconds ->
+                txCount++
+                send(seconds)
+            }
+        }
 
     fun power() {
         txCount++
@@ -123,6 +134,8 @@ internal fun RemoteScreen(
             onGeneralSettings = onGeneralSettings,
             onPower = { power() },
             onPress = { key, action -> send(key, action) },
+            skipSupport = skipSupport,
+            onSkip = skip,
         )
         return
     }
@@ -158,6 +171,8 @@ internal fun RemoteScreen(
                 kind = current.kind,
                 navigationEnabled = navigationEnabled,
                 onPress = { key, action -> send(key, action) },
+                skipSupport = skipSupport,
+                onSkip = skip,
             )
         },
     )

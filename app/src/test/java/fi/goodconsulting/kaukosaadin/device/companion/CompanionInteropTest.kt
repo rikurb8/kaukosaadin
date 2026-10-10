@@ -153,6 +153,61 @@ class CompanionInteropTest {
         }
     }
 
+    @Test fun skipUsesSignedFloatSecondsAndLiveCapabilities() {
+        val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
+        assertEquals("PAIRED", next())
+        open().use { link ->
+            val support = LinkedBlockingQueue<CompanionSkipSupport>()
+            link.skipListener = { support.put(it) }
+            link.verify(credentials)
+            assertEquals("VERIFIED", next())
+            link.startSession(info, credentials)
+            assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TVRC_SESSION", next())
+            assertEquals("TEXT_SESSION", next())
+            assertEquals(CompanionSkipSupport(true, true), support.poll(5, TimeUnit.SECONDS))
+            for (seconds in listOf(-10.0, 10.0, 30.0, -5.5)) {
+                link.skip(seconds)
+                assertEquals("SKIP $seconds", next())
+            }
+            peer.outputStream.write("skip flags 512\n".toByteArray())
+            peer.outputStream.flush()
+            assertEquals("SKIP_FLAGS 512", next())
+            assertEquals(CompanionSkipSupport(true, false), support.poll(5, TimeUnit.SECONDS))
+            link.skip(10.0)
+            assertEquals("SKIP 10.0", next())
+            assertThrows(CompanionRejected::class.java) { link.skip(-10.0) }
+            assertTrue(link.closed)
+            assertEquals(CompanionSkipSupport(), support.poll(5, TimeUnit.SECONDS))
+            assertEquals(CompanionSkipSupport(), link.skipSupport)
+            assertEquals(null, lines.poll(100, TimeUnit.MILLISECONDS))
+        }
+    }
+
+    @Test fun rejectedSkipClosesTheLinkAndIsNotReplayed() {
+        val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
+        assertEquals("PAIRED", next())
+        open().use { link ->
+            val support = LinkedBlockingQueue<CompanionSkipSupport>()
+            link.skipListener = { support.put(it) }
+            link.verify(credentials)
+            assertEquals("VERIFIED", next())
+            link.startSession(info, credentials)
+            assertEquals("SESSION com.apple.tvremoteservices", next())
+            assertEquals("TVRC_SESSION", next())
+            assertEquals("TEXT_SESSION", next())
+            assertEquals(CompanionSkipSupport(true, true), support.poll(5, TimeUnit.SECONDS))
+            peer.outputStream.write("skip reject\n".toByteArray())
+            peer.outputStream.flush()
+            assertEquals("REJECT_SKIP", next())
+            assertThrows(CompanionRejected::class.java) { link.skip(10.0) }
+            assertEquals("SKIP_REJECTED", next())
+            assertTrue(link.closed)
+            assertThrows(IllegalStateException::class.java) { link.skip(10.0) }
+            assertEquals(null, lines.poll(100, TimeUnit.MILLISECONDS))
+        }
+    }
+
     @Test fun keyboardFocusAndTextMirrorToPeer() {
         val credentials = open().use { it.finishPairing(it.startPairing(), "1111", "Kaukosaadin test") }
         assertEquals("PAIRED", next())

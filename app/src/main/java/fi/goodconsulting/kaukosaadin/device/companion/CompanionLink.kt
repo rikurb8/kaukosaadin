@@ -121,6 +121,12 @@ internal class CompanionLink(
     private var keyboardSession: NskTextSession? = null
     private var textStarted = false
 
+    @Volatile internal var skipSupport = CompanionSkipSupport()
+        private set
+
+    /** Invoked on the reader thread on capability updates and on close to clear stale support. */
+    @Volatile internal var skipListener: ((CompanionSkipSupport) -> Unit)? = null
+
     @Volatile private var session: CompanionCrypto.Session? = null
     private var xid = SecureRandom().nextInt(0x10000).toLong()
     private var localSid = 0L
@@ -307,6 +313,7 @@ internal class CompanionLink(
         } catch (_: CompanionRejected) {
             keyboardSession = null
         }
+        sendEvent("_interest", linkedMapOf("_regEvents" to listOf("_iMC")))
     }
 
     /** Each down/up waits for the TV's acknowledgment; nothing is retried. */
@@ -346,9 +353,19 @@ internal class CompanionLink(
             request("_hidC", linkedMapOf("_hBtS" to 2, "_hidC" to HidCommand.Sleep.code))
         }
 
+    /** Signed seconds: pyatv uses a float even for whole seconds, including backward skips. */
+    fun skip(seconds: Double) =
+        guarded {
+            require(seconds.isFinite() && seconds != 0.0) { "Skip interval must be finite and non-zero." }
+            check(remoteSid >= 0) { "Session not started." }
+            if (!skipSupport.allows(seconds)) throw CompanionRejected("Apple TV does not currently support this skip direction.")
+            request("_mcc", linkedMapOf("_mcc" to 7, "_skpS" to seconds))
+        }
+
     /** Best-effort polite shutdown of the text and remote sessions, then close. */
     fun stopSession() {
         if (remoteSid >= 0 && session != null && !closed) {
+            runCatching { sendEvent("_interest", linkedMapOf("_deregEvents" to listOf("_iMC"))) }
             if (textStarted) runCatching { request("_tiStop", emptyMap(), TEARDOWN_TIMEOUT_MS) }
             runCatching {
                 request(
@@ -464,6 +481,13 @@ internal class CompanionLink(
         content: Map<*, *>,
     ) {
         when (identifier) {
+            "_iMC" ->
+                synchronized(this) {
+                    if (!closed) {
+                        skipSupport = CompanionSkipSupport.fromFlags(content["_mcF"])
+                        skipListener?.invoke(skipSupport)
+                    }
+                }
             "_tiStarted" -> applyKeyboard(content["_tiD"] as? ByteArray)
             "_tiStopped" -> {
                 keyboardSession = null
@@ -537,6 +561,8 @@ internal class CompanionLink(
         synchronized(this) {
             if (closed) return
             closed = true
+            skipSupport = CompanionSkipSupport()
+            skipListener?.invoke(skipSupport)
         }
         // Wake any in-flight request immediately once the reader can no longer answer.
         pending.values.forEach { it.offer(Reply.Closed) }

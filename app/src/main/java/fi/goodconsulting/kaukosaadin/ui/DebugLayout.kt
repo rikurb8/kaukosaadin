@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 
 /**
@@ -50,6 +51,8 @@ internal fun DebugRemoteScreen(
     onGeneralSettings: () -> Unit,
     onPower: () -> Unit,
     onPress: (RemoteKey, PressAction) -> Unit,
+    skipSupport: CompanionSkipSupport,
+    onSkip: ((Double) -> Unit)?,
 ) {
     Column(
         Modifier
@@ -85,6 +88,8 @@ internal fun DebugRemoteScreen(
             kind = current.kind,
             navigationEnabled = navigationEnabled,
             onPress = onPress,
+            skipSupport = skipSupport,
+            onSkip = onSkip,
         )
     }
 }

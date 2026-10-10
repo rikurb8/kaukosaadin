@@ -276,6 +276,26 @@ pairing fails closed). Without the env vars the 3 interop tests are skipped.
 S25 debug APK `d89bbf3fabd435f62c3ff2d11ce8e11c3c335a86b5a37ed4198fe6401e5ee46d`:
 crypto gate 6/6 PASS, remote screen scan found `Entertainment Room` at 192.168.1.40.
 
+### Playback skipping — fake-peer verified
+
+The Standard, Debug and Super remote layouts expose **−10s / +10s**. The session subscribes to
+`_iMC` through `_interest`; `_mcF` bits `0x0200` (forward) and `0x0400` (backward) enable each
+button independently. No flags, malformed flags or a closed session disable both. Navigation
+readiness alone never enables skipping. Teardown deregisters the subscription.
+
+`CompanionLink.skip(seconds)` sends `_mcc` command 7 (SkipBy), with `_skpS` as a signed floating
+point interval. The protocol is not limited to 10 seconds; the current UI deliberately has no
+interval setting. Zero and non-finite intervals are rejected before sending. Commands use the
+existing single-in-flight guard and are never queued or replayed. Acknowledgment is not physical
+playback evidence, and support depends on the playing app.
+
+Checks: `CompanionSkipSupportTest` covers direction flags, malformed/absent flags and invalid
+intervals. `CompanionInteropTest`, running against pinned pyatv via `tools/companion_fake_atv.py`,
+checks −10, +10, +30 and −5.5 seconds on the wire, live loss of backward support, rejection without
+retry, and capability reset on close. Updated Apple TV and LG rendering references keep the
+navigation/casing anchors aligned. No real Apple TV playback or phone layout check has been run
+for this addition.
+
 ### Real Apple TV check — 2026-10-04 (host JVM, operator-confirmed)
 
 The S25 dropped off adb, so the same `CompanionLink` code ran from the Mac mini on the

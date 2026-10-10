@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.LgProtocol
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 import java.util.Locale
@@ -107,6 +109,8 @@ internal fun RemoteKeys(
     kind: DeviceKind,
     navigationEnabled: Boolean,
     onPress: (RemoteKey, PressAction) -> Unit,
+    skipSupport: CompanionSkipSupport = CompanionSkipSupport(),
+    onSkip: ((Double) -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
@@ -120,8 +124,6 @@ internal fun RemoteKeys(
             onPress = { onPress(it, PressAction.Tap) },
         )
         // Siri Remote order: Back and Home side by side, then Play/Pause and volume below.
-        // Volume shares the Play/Pause row so the casing keeps the footprint it had before
-        // the keys existed; a third row pushed the grille and engraving off a phone screen.
         val pillRows =
             if (kind == DeviceKind.AppleTv) {
                 listOf(
@@ -141,9 +143,22 @@ internal fun RemoteKeys(
                 }
             }
         }
-        // Keep the Play/Pause row's footprint: fitToHeight must not resize the
-        // entire remote when switching to a device kind with fewer keys.
-        if (kind == DeviceKind.Lg) Spacer(Modifier.height(44.dp))
+        if (kind == DeviceKind.AppleTv) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = { onSkip?.invoke(-10.0) },
+                    enabled = navigationEnabled && onSkip != null && skipSupport.backward,
+                    modifier = Modifier.height(48.dp).semantics { contentDescription = "Skip backward 10 seconds" },
+                ) { Text("−10s") }
+                TextButton(
+                    onClick = { onSkip?.invoke(10.0) },
+                    enabled = navigationEnabled && onSkip != null && skipSupport.forward,
+                    modifier = Modifier.height(48.dp).semantics { contentDescription = "Skip forward 10 seconds" },
+                ) { Text("+10s") }
+            }
+        }
+        // Keep the playback rows' footprint when switching device kind.
+        if (kind == DeviceKind.Lg) Spacer(Modifier.height(108.dp))
     }
 }
 

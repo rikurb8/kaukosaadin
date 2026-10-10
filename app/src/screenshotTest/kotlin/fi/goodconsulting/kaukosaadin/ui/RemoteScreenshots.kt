@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import com.android.tools.screenshot.PreviewTest
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 
 // Rendering-only remotes: no client, session or network, just what each kind hands RemoteScreen.
 private val appleTv = SavedDevice("preview-apple", DeviceKind.AppleTv, "Living room Apple TV", "192.0.2.10")
@@ -39,6 +40,8 @@ private fun RemoteFrame(
             onGeneralSettings = {},
             onPower = {},
             onKey = { _, _ -> },
+            skipSupport = CompanionSkipSupport(forward = true, backward = true),
+            onSkip = {},
         )
     }
 }

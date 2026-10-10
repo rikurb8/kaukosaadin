@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import fi.goodconsulting.kaukosaadin.device.DeviceKind
 import fi.goodconsulting.kaukosaadin.device.SavedDevice
 import fi.goodconsulting.kaukosaadin.device.companion.CompanionClient
+import fi.goodconsulting.kaukosaadin.device.companion.CompanionSkipSupport
 import fi.goodconsulting.kaukosaadin.device.companion.HidCommand
 import fi.goodconsulting.kaukosaadin.device.companion.PressAction
 
@@ -39,6 +40,7 @@ internal fun SuperRemoteAppleTvSection(
     // AppleTvSessionHost owns the RESUMED-scoped connect/disconnect and the keyboard dialog; these
     // controls only render its state and dispatch one press at a time through it.
     AppleTvSessionHost(client) { session ->
+        val skipSupport by client.skipSupport.collectAsState()
         AppleTvControls(
             device = device,
             session = session,
@@ -46,6 +48,8 @@ internal fun SuperRemoteAppleTvSection(
                 dispatchAppleTvPress(session, { command, press -> client.press(command, press) }, key, action)
             },
             onReconnect = { session.run { client.connect() } },
+            skipSupport = skipSupport,
+            onSkip = { seconds -> session.run { client.skip(seconds) } },
         )
     }
 }
@@ -86,6 +90,8 @@ private fun AppleTvControls(
     session: AppleTvSession,
     onPress: (RemoteKey, PressAction) -> Unit,
     onReconnect: () -> Unit,
+    skipSupport: CompanionSkipSupport,
+    onSkip: (Double) -> Unit,
 ) {
     val status by session.status.collectAsState()
     val paired by session.paired.collectAsState()
@@ -116,6 +122,8 @@ private fun AppleTvControls(
             kind = DeviceKind.AppleTv,
             navigationEnabled = enabled,
             onPress = onPress,
+            skipSupport = skipSupport,
+            onSkip = onSkip,
         )
         if (paired) TextButton(onClick = onReconnect, enabled = enabled) { Text("Reconnect") }
     }

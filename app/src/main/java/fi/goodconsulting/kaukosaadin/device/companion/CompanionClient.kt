@@ -69,6 +69,9 @@ class CompanionClient(
     /** Non-null while the TV's on-screen keyboard is focused; the UI mirrors typed text to it. */
     val keyboard = mutableKeyboard.asStateFlow()
 
+    private val mutableSkipSupport = MutableStateFlow(CompanionSkipSupport())
+    val skipSupport = mutableSkipSupport.asStateFlow()
+
     private val mutableApps = MutableStateFlow(emptyList<AppleTvApp>())
 
     /** Last app list the TV reported; empty until [appList] succeeds. A snapshot, not a fixed set. */
@@ -162,6 +165,7 @@ class CompanionClient(
         link = null
         current?.let { runCatching { it.stopSession() } }
         mutableKeyboard.value = null
+        mutableSkipSupport.value = CompanionSkipSupport()
     }
 
     private fun session(): CompanionLink {
@@ -172,6 +176,7 @@ class CompanionClient(
             val opened = CompanionLink.open(InetAddress.getByName(host), prefs.getInt("port", 0))
             try {
                 opened.keyboardListener = { mutableKeyboard.value = it }
+                opened.skipListener = { mutableSkipSupport.value = it }
                 opened.verify(credentials)
                 opened.startSession(clientInfo(), credentials)
                 link = opened
@@ -197,6 +202,19 @@ class CompanionClient(
             }
         Result(true, "$label acknowledged by Apple TV; on-screen result NOT confirmed.")
     }
+
+    /** Skip once, never queued or replayed; a positive interval goes forward. */
+    suspend fun skip(seconds: Double) =
+        operation {
+            require(seconds.isFinite() && seconds != 0.0) { "Skip interval must be finite and non-zero." }
+            val current = link
+            if (current == null || !current.skipSupport.allows(seconds)) {
+                Result(false, "Apple TV does not currently support this skip direction.")
+            } else {
+                current.skip(seconds)
+                Result(true, "Skip ${seconds}s acknowledged by Apple TV; playback result NOT confirmed.")
+            }
+        }
 
     /** Put the Apple TV to sleep, like pyatv `CompanionPower.turn_off`. Wake is not implemented. */
     suspend fun sleep() =
